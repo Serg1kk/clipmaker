@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PreviewLayoutWithCropper } from '../components/cropper';
 import { CropCoordinates, NormalizedCropCoordinates } from '../components/cropper/types';
 import { TemplateType } from '../components/TemplateSelector';
+import TextStylingPanel, { TextStyle } from '../components/TextStylingPanel';
 
 // Simple colored placeholder image
 const SAMPLE_IMAGE = 'data:image/svg+xml,' + encodeURIComponent(`
@@ -22,6 +23,12 @@ const CropperDemo = () => {
   const [template, setTemplate] = useState<TemplateType>('1-frame');
   const [coordinates, setCoordinates] = useState<CropCoordinates[]>([]);
   const [normalizedCoords, setNormalizedCoords] = useState<NormalizedCropCoordinates[]>([]);
+  const [textStyle, setTextStyle] = useState<TextStyle>({
+    fontFamily: 'Arial',
+    fontSize: 24,
+    textColor: '#FFFFFF',
+    position: 'bottom',
+  });
 
   return (
     <div className="max-w-7xl mx-auto p-4">
@@ -34,32 +41,49 @@ const CropperDemo = () => {
         </p>
       </div>
 
-      {/* Main cropper with preview */}
-      <div className="bg-gray-800 rounded-xl p-6 mb-8">
-        <PreviewLayoutWithCropper
-          src={SAMPLE_IMAGE}
-          srcType="image"
-          initialTemplate="1-frame"
-          previewWidth={270}
-          onTemplateChange={(t) => {
-            console.log('Template changed:', t);
-            setTemplate(t);
-          }}
-          onCropChange={(c) => {
-            console.log('Crop changed:', c);
-            setCoordinates(c);
-          }}
-          onNormalizedCropChange={(n) => {
-            console.log('Normalized:', n);
-            setNormalizedCoords(n);
-          }}
-        />
+      {/* Main cropper with preview and text styling */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+        {/* Cropper section - takes 3 columns */}
+        <div className="lg:col-span-3 bg-gray-800 rounded-xl p-6">
+          <PreviewLayoutWithCropper
+            src={SAMPLE_IMAGE}
+            srcType="image"
+            initialTemplate="1-frame"
+            previewWidth={270}
+            onTemplateChange={(t) => {
+              console.log('Template changed:', t);
+              setTemplate(t);
+            }}
+            onCropChange={(c) => {
+              console.log('Crop changed:', c);
+              setCoordinates(c);
+            }}
+            onNormalizedCropChange={(n) => {
+              console.log('Normalized:', n);
+              setNormalizedCoords(n);
+            }}
+          />
+        </div>
+
+        {/* Text Styling Panel - takes 1 column */}
+        <div className="lg:col-span-1">
+          <div className="bg-gray-800 rounded-xl p-4">
+            <h2 className="text-lg font-semibold text-white mb-4">Text Styling</h2>
+            <TextStylingPanel
+              initialStyle={textStyle}
+              onStyleChange={(style) => {
+                console.log('Text style changed:', style);
+                setTextStyle(style);
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Current state display */}
       <div className="bg-gray-800 rounded-xl p-6 mb-8">
         <h2 className="text-lg font-semibold text-white mb-4">Current State</h2>
-        <div className="grid grid-cols-3 gap-4 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 text-sm">
           <div>
             <span className="text-gray-400">Template:</span>
             <span className="text-white ml-2">{template}</span>
@@ -69,14 +93,32 @@ const CropperDemo = () => {
             <span className="text-white ml-2">{coordinates.length}</span>
           </div>
           <div>
-            <span className="text-gray-400">Normalized:</span>
-            <span className="text-white ml-2">{normalizedCoords.length}</span>
+            <span className="text-gray-400">Font:</span>
+            <span className="text-white ml-2">{textStyle.fontFamily}</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Size:</span>
+            <span className="text-white ml-2">{textStyle.fontSize}px</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Color:</span>
+            <span className="text-white ml-2 inline-flex items-center gap-1">
+              <span
+                className="w-3 h-3 rounded border border-gray-500"
+                style={{ backgroundColor: textStyle.textColor }}
+              />
+              {textStyle.textColor}
+            </span>
+          </div>
+          <div>
+            <span className="text-gray-400">Position:</span>
+            <span className="text-white ml-2 capitalize">{textStyle.position}</span>
           </div>
         </div>
       </div>
 
       {/* Debug output */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-gray-800 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4">
             Raw Coordinates (pixels)
@@ -92,6 +134,15 @@ const CropperDemo = () => {
           </h2>
           <pre className="bg-gray-900 rounded-lg p-4 text-sm text-gray-300 overflow-auto max-h-64">
             {JSON.stringify(normalizedCoords, null, 2) || '[]'}
+          </pre>
+        </div>
+
+        <div className="bg-gray-800 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">
+            Text Style
+          </h2>
+          <pre className="bg-gray-900 rounded-lg p-4 text-sm text-gray-300 overflow-auto max-h-64">
+            {JSON.stringify(textStyle, null, 2)}
           </pre>
         </div>
       </div>
