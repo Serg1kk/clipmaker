@@ -63,6 +63,15 @@ from .engaging_moments import (
     find_engaging_moments_async,
     find_engaging_moments_response,
 )
+from .karaoke_generator import (
+    generate_karaoke_ass,
+    generate_karaoke_ass_multiline,
+    KaraokeStyle,
+    KaraokeConfig,
+    ASSColor,
+    ASSAlignment,
+    KaraokeEffect,
+)
 
 __all__ = [
     # File Browser
@@ -105,4 +114,12 @@ __all__ = [
     "find_engaging_moments",
     "find_engaging_moments_async",
     "find_engaging_moments_response",
+    # Karaoke Generator
+    "generate_karaoke_ass",
+    "generate_karaoke_ass_multiline",
+    "KaraokeStyle",
+    "KaraokeConfig",
+    "ASSColor",
+    "ASSAlignment",
+    "KaraokeEffect",
 ]
