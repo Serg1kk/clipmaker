@@ -12,10 +12,16 @@ aiofiles>=23.2.1,<24.0.0
 # Data Validation (included with FastAPI but pinned for clarity)
 pydantic>=2.5.0,<3.0.0
 
+# WebSocket Support
+websockets>=12.0,<13.0
+
 # Optional: Production ASGI Server
 # gunicorn>=21.0.0,<22.0.0
 
-# Optional: For actual transcription (add when implementing)
-# openai-whisper>=20231117
-# torch>=2.0.0
-# torchaudio>=2.0.0
+# Whisper Transcription Dependencies
+openai-whisper>=20231117
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# FFmpeg Python bindings for audio processing
+ffmpeg-python>=0.2.0

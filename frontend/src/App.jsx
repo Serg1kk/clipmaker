@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 
 const STATUS = {
   IDLE: 'idle',
@@ -6,6 +6,14 @@ const STATUS = {
   PROCESSING: 'processing',
   COMPLETED: 'completed',
   ERROR: 'error',
+};
+
+// WebSocket connection states
+const WS_STATE = {
+  CONNECTING: 'connecting',
+  CONNECTED: 'connected',
+  DISCONNECTED: 'disconnected',
+  RECONNECTING: 'reconnecting',
 };
 
 const styles = {
@@ -99,6 +107,20 @@ const styles = {
     color: '#888',
     fontSize: '0.875rem',
   },
+  progressDetails: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '8px',
+  },
+  progressMessage: {
+    color: '#aaa',
+    fontSize: '0.875rem',
+  },
+  etaText: {
+    color: '#666',
+    fontSize: '0.75rem',
+  },
   resultCard: {
     background: '#1a1a1a',
     borderRadius: '12px',
@@ -155,6 +177,19 @@ const styles = {
     marginTop: '16px',
     width: '100%',
   },
+  wsIndicator: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '0.75rem',
+    color: '#666',
+    marginTop: '8px',
+  },
+  wsIndicatorDot: {
+    width: '8px',
+    height: '8px',
+    borderRadius: '50%',
+  },
 };
 
 const getStatusColor = (status) => {
@@ -168,45 +203,231 @@ const getStatusColor = (status) => {
   return colors[status] || colors[STATUS.IDLE];
 };
 
+const getWsIndicatorColor = (wsState) => {
+  const colors = {
+    [WS_STATE.CONNECTED]: '#4aff6b',
+    [WS_STATE.CONNECTING]: '#ffb84a',
+    [WS_STATE.RECONNECTING]: '#ffb84a',
+    [WS_STATE.DISCONNECTED]: '#ff6b6b',
+  };
+  return colors[wsState] || '#666';
+};
+
+const formatEta = (seconds) => {
+  if (!seconds || seconds <= 0) return '';
+  if (seconds < 60) return `${Math.round(seconds)}s remaining`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${minutes}m ${secs}s remaining`;
+};
+
+/**
+ * Custom hook for WebSocket connection with auto-reconnect
+ */
+function useWebSocket(jobId, onMessage, onError) {
+  const wsRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const [wsState, setWsState] = useState(WS_STATE.DISCONNECTED);
+  const maxReconnectAttempts = 5;
+  const baseReconnectDelay = 1000;
+
+  const connect = useCallback(() => {
+    if (!jobId) return;
+
+    // Clean up existing connection
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
+    setWsState(reconnectAttemptsRef.current > 0 ? WS_STATE.RECONNECTING : WS_STATE.CONNECTING);
+
+    // Build WebSocket URL
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/ws/job/${jobId}`;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('WebSocket connected for job:', jobId);
+        setWsState(WS_STATE.CONNECTED);
+        reconnectAttemptsRef.current = 0;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          // Handle ping messages
+          if (data.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
+            return;
+          }
+
+          // Forward other messages to handler
+          if (onMessage) {
+            onMessage(data);
+          }
+        } catch (err) {
+          console.error('Failed to parse WebSocket message:', err);
+        }
+      };
+
+      ws.onerror = (event) => {
+        console.error('WebSocket error:', event);
+        if (onError) {
+          onError(event);
+        }
+      };
+
+      ws.onclose = (event) => {
+        console.log('WebSocket closed:', event.code, event.reason);
+        setWsState(WS_STATE.DISCONNECTED);
+
+        // Attempt reconnection if not a clean close and under max attempts
+        if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
+          const delay = baseReconnectDelay * Math.pow(2, reconnectAttemptsRef.current);
+          reconnectAttemptsRef.current += 1;
+
+          console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`);
+
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect();
+          }, delay);
+        }
+      };
+    } catch (err) {
+      console.error('Failed to create WebSocket:', err);
+      setWsState(WS_STATE.DISCONNECTED);
+    }
+  }, [jobId, onMessage, onError]);
+
+  const disconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    if (wsRef.current) {
+      wsRef.current.close(1000, 'Client disconnect');
+      wsRef.current = null;
+    }
+
+    reconnectAttemptsRef.current = 0;
+    setWsState(WS_STATE.DISCONNECTED);
+  }, []);
+
+  // Connect when jobId changes
+  useEffect(() => {
+    if (jobId) {
+      connect();
+    }
+
+    return () => {
+      disconnect();
+    };
+  }, [jobId, connect, disconnect]);
+
+  return { wsState, disconnect };
+}
+
 export default function App() {
   const [status, setStatus] = useState(STATUS.IDLE);
   const [progress, setProgress] = useState(0);
   const [file, setFile] = useState(null);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState('');
-  const [taskId, setTaskId] = useState(null);
+  const [jobId, setJobId] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [progressMessage, setProgressMessage] = useState('');
+  const [etaSeconds, setEtaSeconds] = useState(null);
+
+  // Handle WebSocket messages
+  const handleWsMessage = useCallback((data) => {
+    console.log('WebSocket message:', data);
+
+    switch (data.type) {
+      case 'progress':
+        setProgress(data.progress || 0);
+        setProgressMessage(data.message || '');
+        if (data.details?.eta_seconds) {
+          setEtaSeconds(data.details.eta_seconds);
+        }
+
+        if (data.stage === 'completed') {
+          setStatus(STATUS.COMPLETED);
+          setProgress(100);
+          // Fetch the final result
+          fetchResult(data.job_id);
+        } else if (data.stage === 'failed') {
+          setStatus(STATUS.ERROR);
+          setError(data.message || 'Transcription failed');
+        }
+        break;
+
+      case 'initial_status':
+        if (data.status === 'completed') {
+          setStatus(STATUS.COMPLETED);
+          setProgress(100);
+          fetchResult(data.job_id);
+        } else if (data.status === 'failed') {
+          setStatus(STATUS.ERROR);
+        } else {
+          setProgress(data.progress || 0);
+        }
+        break;
+
+      case 'waiting':
+        setProgressMessage('Waiting for job to start...');
+        break;
+
+      default:
+        console.log('Unknown message type:', data.type);
+    }
+  }, []);
+
+  const handleWsError = useCallback(() => {
+    // WebSocket errors are logged, but we don't necessarily want to show an error
+    // to the user as the WebSocket might reconnect
+    console.log('WebSocket connection error - will attempt reconnect');
+  }, []);
+
+  // Use WebSocket hook
+  const { wsState, disconnect: disconnectWs } = useWebSocket(
+    jobId,
+    handleWsMessage,
+    handleWsError
+  );
+
+  // Fetch the final result when transcription is complete
+  const fetchResult = useCallback(async (id) => {
+    try {
+      const response = await fetch(`/api/transcribe/${id}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch result');
+      }
+      const data = await response.json();
+      setTranscript(data.result || 'No transcript available');
+    } catch (err) {
+      console.error('Failed to fetch result:', err);
+      setError('Failed to fetch transcription result');
+    }
+  }, []);
 
   const resetState = useCallback(() => {
+    disconnectWs();
     setStatus(STATUS.IDLE);
     setProgress(0);
     setFile(null);
     setTranscript('');
     setError('');
-    setTaskId(null);
-  }, []);
-
-  const pollStatus = useCallback(async (id) => {
-    try {
-      const response = await fetch(`/api/transcribe/${id}`);
-      const data = await response.json();
-
-      if (data.status === 'completed') {
-        setStatus(STATUS.COMPLETED);
-        setProgress(100);
-        setTranscript(data.transcript || 'No transcript available');
-      } else if (data.status === 'failed') {
-        setStatus(STATUS.ERROR);
-        setError(data.error || 'Transcription failed');
-      } else {
-        setProgress(data.progress || 50);
-        setTimeout(() => pollStatus(id), 2000);
-      }
-    } catch (err) {
-      setStatus(STATUS.ERROR);
-      setError('Failed to check transcription status');
-    }
-  }, []);
+    setJobId(null);
+    setProgressMessage('');
+    setEtaSeconds(null);
+  }, [disconnectWs]);
 
   const uploadFile = useCallback(async (selectedFile) => {
     if (!selectedFile) return;
@@ -216,6 +437,8 @@ export default function App() {
     setProgress(0);
     setError('');
     setTranscript('');
+    setProgressMessage('Uploading file...');
+    setEtaSeconds(null);
 
     const formData = new FormData();
     formData.append('file', selectedFile);
@@ -227,20 +450,23 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Upload failed: ${response.statusText}`);
       }
 
       const data = await response.json();
-      setTaskId(data.task_id);
-      setStatus(STATUS.PROCESSING);
-      setProgress(25);
 
-      pollStatus(data.task_id);
+      // Set job ID - this triggers WebSocket connection
+      setJobId(data.job_id);
+      setStatus(STATUS.PROCESSING);
+      setProgressMessage('Connecting to progress stream...');
+
     } catch (err) {
       setStatus(STATUS.ERROR);
       setError(err.message || 'Failed to upload file');
+      setProgressMessage('');
     }
-  }, [pollStatus]);
+  }, []);
 
   const handleFileSelect = useCallback((e) => {
     const selectedFile = e.target.files?.[0];
@@ -299,7 +525,7 @@ export default function App() {
         onDragLeave={handleDragLeave}
       >
         <div style={styles.uploadIcon}>
-          {status === STATUS.IDLE ? '🎬' : status === STATUS.COMPLETED ? '✅' : '⏳'}
+          {status === STATUS.IDLE ? '\uD83C\uDFAC' : status === STATUS.COMPLETED ? '\u2705' : '\u23F3'}
         </div>
         <p style={styles.uploadText}>
           {status === STATUS.IDLE
@@ -341,6 +567,33 @@ export default function App() {
             <div style={{ ...styles.progressFill, width: `${progress}%` }} />
           </div>
           {file && <p style={styles.fileName}>{file.name}</p>}
+
+          {/* Progress details */}
+          <div style={styles.progressDetails}>
+            <span style={styles.progressMessage}>{progressMessage}</span>
+            <span style={styles.etaText}>{formatEta(etaSeconds)}</span>
+          </div>
+
+          {/* WebSocket connection indicator */}
+          {status === STATUS.PROCESSING && (
+            <div style={styles.wsIndicator}>
+              <span
+                style={{
+                  ...styles.wsIndicatorDot,
+                  background: getWsIndicatorColor(wsState),
+                }}
+              />
+              <span>
+                {wsState === WS_STATE.CONNECTED
+                  ? 'Live updates'
+                  : wsState === WS_STATE.CONNECTING
+                  ? 'Connecting...'
+                  : wsState === WS_STATE.RECONNECTING
+                  ? 'Reconnecting...'
+                  : 'Disconnected'}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
