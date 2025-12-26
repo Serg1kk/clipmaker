@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import VideoPlayer, { VideoPlayerProps } from './VideoPlayer';
 import { VideoTimeline, TimelineMarker, TimeRange } from './timeline';
 import { useTimeline } from '../hooks/useTimeline';
+import MomentsSidebar from './MomentsSidebar';
 
 /**
  * Extended props for VideoPlayerWithTimeline
@@ -21,6 +22,10 @@ export interface VideoPlayerWithTimelineProps extends VideoPlayerProps {
   onMomentSelect?: (marker: TimelineMarker | null) => void;
   /** Whether to show the timeline */
   showTimeline?: boolean;
+  /** Whether to show the moments sidebar */
+  showMomentsSidebar?: boolean;
+  /** Callback when a moment is deleted */
+  onMomentDelete?: (momentId: string) => void;
 }
 
 /**
@@ -50,6 +55,8 @@ const VideoPlayerWithTimeline = ({
   onRangeSelect,
   onMomentSelect,
   showTimeline = true,
+  showMomentsSidebar = false,
+  onMomentDelete,
   className = '',
   ...playerProps
 }: VideoPlayerWithTimelineProps) => {
@@ -62,6 +69,9 @@ const VideoPlayerWithTimeline = ({
   const [duration, setDuration] = useState(0);
   const [isReady, setIsReady] = useState(false);
 
+  // Track selected marker for sidebar highlighting
+  const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+
   // Timeline state management
   const {
     markers,
@@ -70,6 +80,7 @@ const VideoPlayerWithTimeline = ({
     handleMarkerClick,
     handleMarkerHover,
     loadEngagingMoments,
+    removeMarker,
   } = useTimeline({
     onRangeChange: onRangeSelect,
     onMarkerSelect: onMomentSelect,
@@ -142,36 +153,63 @@ const VideoPlayerWithTimeline = ({
   // Handle marker click - seek to marker start
   const handleMarkerClickWithSeek = useCallback((marker: TimelineMarker) => {
     handleMarkerClick(marker);
+    setSelectedMarkerId(marker.id);
     if (videoRef.current) {
       videoRef.current.currentTime = marker.startTime;
       setCurrentTime(marker.startTime);
     }
   }, [handleMarkerClick]);
 
+  // Handle moment delete from sidebar
+  const handleMomentDelete = useCallback((momentId: string) => {
+    removeMarker(momentId);
+    if (selectedMarkerId === momentId) {
+      setSelectedMarkerId(null);
+    }
+    onMomentDelete?.(momentId);
+  }, [removeMarker, selectedMarkerId, onMomentDelete]);
+
   return (
-    <div ref={containerRef} className={`video-player-with-timeline ${className}`}>
-      {/* Video Player */}
-      <VideoPlayer {...playerProps} />
+    <div
+      ref={containerRef}
+      className={`video-player-with-timeline ${showMomentsSidebar ? 'flex gap-4' : ''} ${className}`}
+    >
+      {/* Main content area */}
+      <div className={showMomentsSidebar ? 'flex-1 min-w-0' : ''}>
+        {/* Video Player */}
+        <VideoPlayer {...playerProps} />
 
-      {/* Timeline */}
-      {showTimeline && isReady && (
-        <div className="mt-4">
-          <VideoTimeline
-            duration={duration}
-            currentTime={currentTime}
-            markers={markers}
-            selectedRange={selectedRange}
-            onSeek={handleSeek}
-            onMarkerClick={handleMarkerClickWithSeek}
-            onRangeSelect={handleRangeSelect}
-            onMarkerHover={handleMarkerHover}
-          />
-        </div>
-      )}
+        {/* Timeline */}
+        {showTimeline && isReady && (
+          <div className="mt-4">
+            <VideoTimeline
+              duration={duration}
+              currentTime={currentTime}
+              markers={markers}
+              selectedRange={selectedRange}
+              onSeek={handleSeek}
+              onMarkerClick={handleMarkerClickWithSeek}
+              onRangeSelect={handleRangeSelect}
+              onMarkerHover={handleMarkerHover}
+            />
+          </div>
+        )}
 
-      {/* Loading state for timeline */}
-      {showTimeline && !isReady && (
-        <div className="mt-4 h-10 bg-gray-800 rounded-lg animate-pulse" />
+        {/* Loading state for timeline */}
+        {showTimeline && !isReady && (
+          <div className="mt-4 h-10 bg-gray-800 rounded-lg animate-pulse" />
+        )}
+      </div>
+
+      {/* Moments Sidebar */}
+      {showMomentsSidebar && (
+        <MomentsSidebar
+          moments={markers}
+          selectedMomentId={selectedMarkerId}
+          onMomentClick={handleMarkerClickWithSeek}
+          onMomentDelete={handleMomentDelete}
+          className="w-80 h-[500px] border-l border-gray-700"
+        />
       )}
     </div>
   );
