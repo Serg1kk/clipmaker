@@ -56,6 +56,13 @@ from .websocket_service import (
     connection_manager,
     handle_websocket_messages,
 )
+from .engaging_moments import (
+    EngagingMoment,
+    EngagingMomentsResponse,
+    find_engaging_moments,
+    find_engaging_moments_async,
+    find_engaging_moments_response,
+)
 
 __all__ = [
     # File Browser
@@ -92,4 +99,10 @@ __all__ = [
     "ProgressStage",
     "connection_manager",
     "handle_websocket_messages",
+    # Engaging Moments Service
+    "EngagingMoment",
+    "EngagingMomentsResponse",
+    "find_engaging_moments",
+    "find_engaging_moments_async",
+    "find_engaging_moments_response",
 ]
