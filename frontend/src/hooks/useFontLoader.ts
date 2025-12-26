@@ -160,7 +160,7 @@ export function useFontLoader(
  *       {isLoading && <span>Loading...</span>}
  *       {error && <span>Error: {error}</span>}
  *       <select value={selectedFont} onChange={(e) => setSelectedFont(e.target.value)}>
- *         {/* options */}
+ *         {FONT_OPTIONS.map(f => <option key={f.id}>{f.name}</option>)}
  *       </select>
  *     </div>
  *   );
