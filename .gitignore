@@ -40,10 +40,10 @@ uploads/*
 logs/
 
 # Claude Flow runtime files (DO NOT COMMIT)
+.claude-flow/
 .swarm/*.db
 .swarm/*.db-shm
 .swarm/*.db-wal
-.claude-flow/metrics/
 .hive-mind/*.db
 .hive-mind/*.db-shm
 .hive-mind/*.db-wal
