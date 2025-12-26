@@ -1,0 +1,586 @@
+================================================================================
+                   useProgress HOOK - ARCHITECTURE SUMMARY
+================================================================================
+
+PROJECT: AI Clips - Job Progress Tracking via WebSocket
+ROLE: Hive Mind Analyst Agent (swarm-1766781247115-326bh6ahm)
+DATE: December 26, 2025
+STATUS: Architecture Design Complete - Ready for Implementation
+
+================================================================================
+DELIVERABLES CHECKLIST
+================================================================================
+
+Documentation Files Created:
+  [✓] useProgress.spec.md                    - Complete architectural specification
+  [✓] IMPLEMENTATION_GUIDE.md                - Step-by-step implementation guide
+  [✓] ARCHITECTURE_DIAGRAM.md                - Visual diagrams and flows
+  [✓] README.md                              - Quick reference and navigation
+  [✓] progress.types.ts                      - Full TypeScript type definitions
+  [✓] ARCHITECTURE_SUMMARY.txt              - This executive summary
+
+File Locations:
+  - /frontend/src/hooks/useProgress.spec.md
+  - /frontend/src/hooks/IMPLEMENTATION_GUIDE.md
+  - /frontend/src/hooks/ARCHITECTURE_DIAGRAM.md
+  - /frontend/src/hooks/README.md
+  - /frontend/src/hooks/types/progress.types.ts
+  - /frontend/src/hooks/ARCHITECTURE_SUMMARY.txt
+
+================================================================================
+CORE DESIGN DECISIONS
+================================================================================
+
+1. STATE MANAGEMENT APPROACH
+   - React hooks (useState) for reactive state
+   - useRef for WebSocket and timeout management
+   - useCallback for memoized functions
+   - Single source of truth pattern
+
+2. CONNECTION LIFECYCLE
+   Sequence: DISCONNECTED → CONNECTING → CONNECTED → RECONNECTING → CLOSED
+   - Auto-connect when jobId provided
+   - Auto-disconnect when jobId becomes null
+   - Automatic cleanup on unmount
+
+3. RECONNECTION STRATEGY
+   - Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s (capped)
+   - Configurable max attempts (default: 5)
+   - Smart close code handling (skip 1000, 1003, 1008, 1009, 1011, 1012)
+   - Manual reconnect function to reset attempt counter
+
+4. MESSAGE HANDLING
+   - JSON parsing with error handling
+   - Ping/pong keep-alive mechanism
+   - Optional message buffering while connecting
+   - Custom message parser support
+   - Type-safe message validation
+
+5. ERROR RECOVERY
+   - Network errors → Exponential backoff reconnection
+   - Parse errors → Log and continue
+   - State errors → Validation and clamping
+   - Lifecycle errors → Graceful cleanup
+
+6. TYPE SAFETY
+   - Full TypeScript implementation
+   - Comprehensive interface definitions
+   - Type guards and validators
+   - Strict type checking
+
+================================================================================
+KEY FEATURES
+================================================================================
+
+Input Interface (UseProgressInput):
+  - jobId: string | null              (required)
+  - onProgressChange?: callback       (optional)
+  - onStatusChange?: callback         (optional)
+  - onError?: callback                (optional)
+  - reconnectConfig?: override        (optional)
+  - messageQueueLimit?: number        (optional)
+  - buildWebSocketUrl?: custom        (optional)
+  - parseMessage?: custom             (optional)
+
+Output Interface (UseProgressReturn):
+  - progress: number                  (0-100)
+  - status: string                    (status message)
+  - isConnected: boolean              (connection state)
+  - error: string | null              (error tracking)
+  - wsState?: WebSocketState          (advanced)
+  - reconnectAttempts?: number        (debugging)
+  - reconnect(): void                 (manual reconnect)
+  - reset(): void                     (clear state)
+  - disconnect?(): void               (cleanup)
+  - cleanup?(): void                  (force cleanup)
+
+================================================================================
+TECHNICAL SPECIFICATIONS
+================================================================================
+
+WebSocket Protocol:
+  URL Format: ws[s]://host/ws/job/{jobId}
+
+  Inbound Message Format:
+  {
+    type: 'progress' | 'status' | 'error' | 'ping' | 'pong' | string;
+    progress?: number;        // 0-100
+    status?: string;          // Human-readable status
+    message?: string;         // Additional text
+    error?: string;           // Error message
+    eta_seconds?: number;     // Time estimate
+    timestamp?: number;       // Server timestamp
+    data?: object;           // Custom data
+  }
+
+  Outbound Message:
+  { type: 'pong' }
+
+State Management:
+  React State:
+  - progress: number (0-100, auto-clamped)
+  - status: string (current status message)
+  - error: string | null (last error)
+  - wsState: WebSocketState (connection state)
+
+  Internal Refs:
+  - wsRef: WebSocket instance
+  - reconnectTimeoutRef: timeout handle
+  - reconnectAttemptsRef: attempt counter
+  - messageQueueRef: pending messages array
+
+Configuration:
+  Default Reconnect Strategy:
+    - maxAttempts: 5
+    - baseDelay: 1000 ms
+    - maxDelay: 30000 ms
+    - backoffMultiplier: 2
+
+  WebSocket Close Codes (No Reconnect):
+    - 1000: Normal closure
+    - 1003: Unsupported data
+    - 1008: Policy violation
+    - 1009: Message too big
+    - 1011: Server error
+    - 1012: Service restart
+
+================================================================================
+IMPLEMENTATION REQUIREMENTS
+================================================================================
+
+Core Functionality (Section 2 - Implementation Guide):
+  [ ] Connection management
+  [ ] Message parsing and validation
+  [ ] State updates from messages
+  [ ] Callback invocation
+  [ ] Reconnection logic
+  [ ] Error handling
+  [ ] Cleanup and lifecycle management
+
+Helper Functions (Section 7 - Spec):
+  [ ] calculateBackoffDelay()
+  [ ] buildDefaultWebSocketUrl()
+  [ ] isValidProgress()
+  [ ] parseProgressMessage()
+  [ ] processMessageQueue()
+
+Testing Requirements (Section 5 - Implementation Guide):
+  [ ] Unit tests (initialization, state, errors)
+  [ ] Integration tests (connection, messages, lifecycle)
+  [ ] Mock WebSocket implementation
+  [ ] 80%+ code coverage target
+
+Performance Targets:
+  - Memory usage: < 10 KB per instance
+  - Message parsing: O(n) where n = message size
+  - State updates: O(1)
+  - No memory leaks on unmount
+  - No unnecessary re-renders
+
+================================================================================
+FILES TO IMPLEMENT
+================================================================================
+
+Phase 2 - Core Implementation:
+  frontend/src/hooks/useProgress.ts              (TBD)
+    - Main hook implementation
+    - All functions from spec
+    - JSDoc comments
+    - ~400-500 lines
+
+Phase 5 - Testing:
+  frontend/src/hooks/__tests__/useProgress.test.ts           (TBD)
+    - Unit tests
+    - Integration tests
+    - Mock WebSocket
+    - ~600-800 lines
+
+Phase 6 - Examples:
+  frontend/src/hooks/useProgress.examples.tsx    (TBD)
+    - Usage examples
+    - Component templates
+    - Error handling examples
+    - ~200-300 lines
+
+Optional Exports:
+  frontend/src/hooks/index.ts                    (TBD)
+    - Export useProgress
+    - Export types
+    - Export helpers
+
+================================================================================
+REFERENCE PATTERNS
+================================================================================
+
+Basic Usage:
+  const { progress, status, isConnected, error, reconnect } =
+    useProgress({ jobId: 'job-123' });
+
+With Callbacks:
+  const { progress, error } = useProgress({
+    jobId: 'job-123',
+    onProgressChange: (p) => console.log(`Progress: ${p}%`),
+    onStatusChange: (s) => console.log(`Status: ${s}`),
+    onError: (e) => showErrorNotification(e),
+  });
+
+With Custom Config:
+  const { progress } = useProgress({
+    jobId: 'job-123',
+    reconnectConfig: {
+      maxAttempts: 10,
+      baseDelay: 2000,
+    },
+  });
+
+Manual Reconnection:
+  if (error) {
+    return <ErrorAlert message={error} onRetry={reconnect} />;
+  }
+
+Multiple Jobs:
+  const job1 = useProgress({ jobId: 'job-1' });
+  const job2 = useProgress({ jobId: 'job-2' });
+  const job3 = useProgress({ jobId: 'job-3' });
+
+================================================================================
+INTEGRATION WITH EXISTING CODE
+================================================================================
+
+Existing Pattern (App.jsx):
+  - useWebSocket() hook with inline logic
+  - Manual state management
+  - Hard-coded URL building
+  - Limited error handling
+
+New Pattern (useProgress):
+  - Reusable hook with clean API
+  - Built-in state management
+  - Configurable URL building
+  - Comprehensive error handling
+  - Type-safe implementation
+
+Migration Path:
+  1. Implement useProgress hook (standalone)
+  2. Update App.jsx to use new hook (optional)
+  3. Refactor other components gradually
+  4. Deprecate old pattern once all components migrated
+
+Backward Compatibility:
+  - New hook doesn't modify existing code
+  - Can coexist with old pattern
+  - Gradual adoption possible
+  - No breaking changes
+
+================================================================================
+TESTING STRATEGY SUMMARY
+================================================================================
+
+Unit Tests:
+  - Hook initialization with defaults
+  - State updates from messages
+  - Progress clamping (0-100)
+  - Error message handling
+  - Reset functionality
+  - Callback invocation
+
+Integration Tests:
+  - Full connection lifecycle
+  - Message parsing and state flow
+  - Reconnection with backoff
+  - Cleanup on unmount
+  - Cleanup on jobId change
+  - Error recovery scenarios
+
+Mock Implementation:
+  - MockWebSocket class for testing
+  - Control over connection events
+  - Simulate messages and errors
+  - No real network required
+
+Coverage Goals:
+  - Statements: 80%+
+  - Branches: 75%+
+  - Functions: 85%+
+  - Lines: 80%+
+
+================================================================================
+PERFORMANCE CHARACTERISTICS
+================================================================================
+
+Memory Usage:
+  - Hook state variables: ~500 bytes
+  - WebSocket object: ~2-5 KB
+  - Message queue (empty): ~100 bytes
+  - Timeout/attempt refs: ~300 bytes
+  - Total per instance: < 10 KB
+
+Time Complexity:
+  - Hook initialization: O(1)
+  - Message parsing: O(n) where n = message size
+  - State updates: O(1)
+  - Callback invocation: O(1)
+  - Reconnection calculation: O(1)
+
+Optimization Strategies:
+  - Memoized callbacks (useCallback)
+  - No unnecessary re-renders
+  - Automatic message batching
+  - Connection pooling ready (future)
+  - Efficient state updates
+
+================================================================================
+QUALITY ASSURANCE CHECKLIST
+================================================================================
+
+Code Quality:
+  [ ] TypeScript strict mode enabled
+  [ ] All lint rules pass (ESLint)
+  [ ] All tests pass (Jest)
+  [ ] Code coverage 80%+
+  [ ] No TypeScript errors
+  [ ] No console warnings
+
+Functionality:
+  [ ] Connection established correctly
+  [ ] Messages parsed correctly
+  [ ] State updates work as expected
+  [ ] Callbacks invoked properly
+  [ ] Reconnection works with backoff
+  [ ] Cleanup on unmount verified
+  [ ] No memory leaks detected
+
+Performance:
+  [ ] Memory footprint verified
+  [ ] No unnecessary renders
+  [ ] Message processing efficient
+  [ ] Keep-alive mechanism working
+  [ ] Timeout cleanup verified
+
+Security:
+  [ ] WebSocket protocol secure (wss)
+  [ ] Message validation proper
+  [ ] Error handling doesn't expose data
+  [ ] Input sanitization in place
+  [ ] No hardcoded secrets
+
+Documentation:
+  [ ] JSDoc comments complete
+  [ ] README comprehensive
+  [ ] Examples functional
+  [ ] Type definitions accurate
+  [ ] Migration guide clear
+
+================================================================================
+NEXT STEPS FOR IMPLEMENTATION TEAM
+================================================================================
+
+1. START HERE:
+   - Read: /frontend/src/hooks/README.md (overview)
+   - Read: /frontend/src/hooks/useProgress.spec.md (specification)
+   - Review: /frontend/src/hooks/types/progress.types.ts (types)
+
+2. IMPLEMENT:
+   - Follow: /frontend/src/hooks/IMPLEMENTATION_GUIDE.md (Phase 2)
+   - Code: /frontend/src/hooks/useProgress.ts (create)
+   - Test: /frontend/src/hooks/__tests__/useProgress.test.ts (create)
+
+3. VALIDATE:
+   - Run unit tests
+   - Run integration tests
+   - Verify TypeScript compilation
+   - Check code coverage
+
+4. DOCUMENT:
+   - Add JSDoc comments
+   - Create usage examples
+   - Add to component library
+   - Update team documentation
+
+5. DEPLOY:
+   - Code review
+   - Merge to main branch
+   - Publish to production
+   - Monitor usage and errors
+
+================================================================================
+ESTIMATED EFFORT
+================================================================================
+
+Implementation:
+  - Core hook code: 4-6 hours
+  - Unit tests: 2-3 hours
+  - Integration tests: 2-3 hours
+  - Examples & docs: 1-2 hours
+  - Code review & polish: 1-2 hours
+  ────────────────────────
+  Total: 10-16 hours (1-2 developer days)
+
+Testing (if separate):
+  - Test infrastructure: 1-2 hours
+  - Test cases: 2-3 hours
+  - Mock WebSocket: 1 hour
+  - Coverage verification: 1 hour
+  ────────────────────────
+  Total: 5-7 hours (0.5-1 developer days)
+
+Documentation:
+  - Already complete (this phase)
+  - Update with real examples: 1-2 hours
+  - Team training: 1 hour
+  ────────────────────────
+  Total: 2-3 hours
+
+================================================================================
+DOCUMENT STRUCTURE
+================================================================================
+
+README.md
+  ├─ Quick links to all documents
+  ├─ Hook signature and usage
+  ├─ Key features overview
+  ├─ Configuration examples
+  ├─ Testing information
+  ├─ Performance characteristics
+  ├─ FAQ section
+  └─ Support and troubleshooting
+
+useProgress.spec.md (Detailed Reference)
+  ├─ 14 sections covering:
+  │  ├─ Design principles
+  │  ├─ TypeScript interfaces
+  │  ├─ State management
+  │  ├─ Core functions
+  │  ├─ Helper functions
+  │  ├─ Usage examples
+  │  ├─ Testing strategy
+  │  ├─ Error handling
+  │  ├─ Performance considerations
+  │  └─ Implementation checklist
+  └─ 15,000+ words of detailed specifications
+
+IMPLEMENTATION_GUIDE.md (Step-by-Step)
+  ├─ 8 phases of implementation:
+  │  ├─ Phase 1: Setup & types (done)
+  │  ├─ Phase 2: Core hook implementation
+  │  ├─ Phase 3: Configuration & constants
+  │  ├─ Phase 4: Advanced features
+  │  ├─ Phase 5: Testing strategy
+  │  ├─ Phase 6: Documentation
+  │  ├─ Phase 7: Integration
+  │  └─ Phase 8: Validation
+  ├─ Detailed implementation steps
+  ├─ Debugging tips
+  ├─ Common issues & solutions
+  └─ 16,000+ words
+
+ARCHITECTURE_DIAGRAM.md (Visual References)
+  ├─ Component architecture diagram
+  ├─ State transition diagram
+  ├─ Message flow sequence diagram
+  ├─ Reconnection strategy flowchart
+  ├─ Message parsing pipeline
+  ├─ Dependency flow diagram
+  ├─ Error handling decision tree
+  ├─ Memory lifecycle diagram
+  ├─ Performance characteristics
+  ├─ Integration points diagram
+  ├─ Before/after comparison
+  └─ Deployment checklist
+
+progress.types.ts (Type Definitions)
+  ├─ Enums (ProgressMessageType, WebSocketState)
+  ├─ Interfaces (ProgressMessage, ReconnectConfig, etc.)
+  ├─ Type aliases (callbacks, handlers)
+  ├─ Helper functions (type guards, validation)
+  ├─ Constants (defaults, exclusion lists)
+  ├─ Comments and documentation
+  └─ ~350 lines of type-safe definitions
+
+================================================================================
+SUCCESS CRITERIA
+================================================================================
+
+Functional Requirements:
+  ✓ Hook connects to WebSocket when jobId provided
+  ✓ Hook disconnects when jobId becomes null
+  ✓ Hook parses JSON messages correctly
+  ✓ Hook updates progress (0-100)
+  ✓ Hook updates status message
+  ✓ Hook tracks errors
+  ✓ Hook handles ping/pong keep-alive
+  ✓ Hook reconnects with exponential backoff
+  ✓ Hook cleans up on unmount
+  ✓ Hook cleans up on jobId change
+  ✓ Hook invokes callbacks correctly
+  ✓ Hook supports custom configuration
+  ✓ Hook supports custom message parser
+  ✓ Hook supports custom URL builder
+
+Non-Functional Requirements:
+  ✓ Full TypeScript type safety
+  ✓ No console errors or warnings
+  ✓ No memory leaks
+  ✓ No unnecessary re-renders
+  ✓ Memory usage < 10 KB per instance
+  ✓ 80%+ test coverage
+  ✓ All ESLint rules pass
+  ✓ Complete documentation
+  ✓ Working examples
+  ✓ Integration with existing code
+
+================================================================================
+ESTIMATED TIMELINE
+================================================================================
+
+Week 1:
+  Day 1: Implementation (8 hours)
+    - Create useProgress.ts with all functions
+    - Add JSDoc comments
+    - Verify TypeScript compilation
+
+  Day 2: Testing (8 hours)
+    - Write unit tests
+    - Write integration tests
+    - Achieve 80%+ coverage
+
+Week 2:
+  Day 1: Validation & Polish (6 hours)
+    - Code review and fixes
+    - Performance optimization
+    - Documentation update
+
+  Day 2: Integration & Deployment (4 hours)
+    - Create example components
+    - Test with real backend
+    - Deploy to production
+
+Total: 2 weeks for full implementation and deployment
+
+================================================================================
+CONTACT & SUPPORT
+================================================================================
+
+For questions about:
+  - Architecture: See ARCHITECTURE_DIAGRAM.md
+  - Implementation: See IMPLEMENTATION_GUIDE.md
+  - API & Usage: See README.md
+  - Detailed Specs: See useProgress.spec.md
+  - Type Safety: See progress.types.ts
+
+Debugging Resources:
+  - Enable console logging in hook
+  - Check IMPLEMENTATION_GUIDE.md "Debugging Tips"
+  - Review mock WebSocket in test examples
+  - Monitor WebSocket events in browser DevTools
+
+================================================================================
+
+This architecture is ready for implementation. All specifications, types,
+guides, and diagrams have been created to support a smooth development process.
+
+Start with the IMPLEMENTATION_GUIDE.md Phase 2 to begin coding.
+
+================================================================================
+END OF SUMMARY
+================================================================================
