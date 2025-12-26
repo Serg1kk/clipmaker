@@ -11,9 +11,9 @@
  * - Correct moment count display
  */
 
-import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { jest } from '@jest/globals';
 import MomentsSidebar, { type MomentsSidebarProps } from '../MomentsSidebar';
 import { type TimelineMarker } from '../timeline/types';
 
@@ -64,8 +64,8 @@ const mockMarkersWithLongTimes: TimelineMarker[] = [
 function renderMomentsSidebar(props: Partial<MomentsSidebarProps> = {}) {
   const defaultProps: MomentsSidebarProps = {
     moments: [],
-    onMomentClick: vi.fn(),
-    onMomentDelete: vi.fn(),
+    onMomentClick: jest.fn(),
+    onMomentDelete: jest.fn(),
     ...props,
   };
   return render(<MomentsSidebar {...defaultProps} />);
@@ -256,7 +256,7 @@ describe('MomentsSidebar - AI Reason Display', () => {
 
 describe('MomentsSidebar - Moment Click', () => {
   it('calls onMomentClick when moment is clicked', () => {
-    const onMomentClick = vi.fn();
+    const onMomentClick = jest.fn();
     renderMomentsSidebar({ moments: mockMarkers, onMomentClick });
 
     const moment1 = getMomentItem('test-1');
@@ -267,7 +267,7 @@ describe('MomentsSidebar - Moment Click', () => {
   });
 
   it('calls onMomentClick with correct marker data', () => {
-    const onMomentClick = vi.fn();
+    const onMomentClick = jest.fn();
     renderMomentsSidebar({ moments: mockMarkers, onMomentClick });
 
     const moment2 = getMomentItem('test-2');
@@ -284,7 +284,7 @@ describe('MomentsSidebar - Moment Click', () => {
   });
 
   it('each moment can be clicked independently', () => {
-    const onMomentClick = vi.fn();
+    const onMomentClick = jest.fn();
     renderMomentsSidebar({ moments: mockMarkers, onMomentClick });
 
     fireEvent.click(getMomentItem('test-1'));
@@ -326,7 +326,7 @@ describe('MomentsSidebar - Moment Delete', () => {
   });
 
   it('calls onMomentDelete when delete button is clicked', () => {
-    const onMomentDelete = vi.fn();
+    const onMomentDelete = jest.fn();
     renderMomentsSidebar({ moments: mockMarkers, onMomentDelete });
 
     const moment1 = getMomentItem('test-1');
@@ -339,8 +339,8 @@ describe('MomentsSidebar - Moment Delete', () => {
   });
 
   it('delete button click does not trigger moment click', () => {
-    const onMomentClick = vi.fn();
-    const onMomentDelete = vi.fn();
+    const onMomentClick = jest.fn();
+    const onMomentDelete = jest.fn();
     renderMomentsSidebar({ moments: mockMarkers, onMomentClick, onMomentDelete });
 
     const moment1 = getMomentItem('test-1');
@@ -362,7 +362,7 @@ describe('MomentsSidebar - Moment Delete', () => {
   });
 
   it('can delete different moments independently', () => {
-    const onMomentDelete = vi.fn();
+    const onMomentDelete = jest.fn();
     renderMomentsSidebar({ moments: mockMarkers, onMomentDelete });
 
     const deleteBtn1 = getDeleteButton(getMomentItem('test-1'));
@@ -478,8 +478,8 @@ describe('MomentsSidebar - Moment Count', () => {
     const { rerender } = render(
       <MomentsSidebar
         moments={mockMarkers}
-        onMomentClick={vi.fn()}
-        onMomentDelete={vi.fn()}
+        onMomentClick={jest.fn()}
+        onMomentDelete={jest.fn()}
       />
     );
 
@@ -488,8 +488,8 @@ describe('MomentsSidebar - Moment Count', () => {
     rerender(
       <MomentsSidebar
         moments={[mockMarkers[0]]}
-        onMomentClick={vi.fn()}
-        onMomentDelete={vi.fn()}
+        onMomentClick={jest.fn()}
+        onMomentDelete={jest.fn()}
       />
     );
 
@@ -527,7 +527,7 @@ describe('MomentsSidebar - Accessibility', () => {
   });
 
   it('delete buttons are keyboard accessible', () => {
-    const onMomentDelete = vi.fn();
+    const onMomentDelete = jest.fn();
     renderMomentsSidebar({ moments: mockMarkers, onMomentDelete });
 
     const deleteBtn = getDeleteButton(getMomentItem('test-1'));
@@ -539,7 +539,7 @@ describe('MomentsSidebar - Accessibility', () => {
   });
 
   it('moments are keyboard accessible', () => {
-    const onMomentClick = vi.fn();
+    const onMomentClick = jest.fn();
     renderMomentsSidebar({ moments: mockMarkers, onMomentClick });
 
     const moment = getMomentItem('test-1');

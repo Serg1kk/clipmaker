@@ -1,4 +1,8 @@
 export { default as VideoFrameCropper } from './VideoFrameCropper';
 export { default as CropRectangle } from './CropRectangle';
 export { default as CropperWithTemplateSelector } from './CropperWithTemplateSelector';
+export { default as PreviewLayout } from './PreviewLayout';
+export { default as PreviewLayoutWithCropper } from './PreviewLayoutWithCropper';
 export * from './types';
+export type { PreviewLayoutProps } from './PreviewLayout';
+export type { PreviewLayoutWithCropperProps } from './PreviewLayoutWithCropper';
