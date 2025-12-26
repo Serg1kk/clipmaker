@@ -38,3 +38,15 @@ uploads/*
 # Logs
 *.log
 logs/
+
+# Claude Flow runtime files (DO NOT COMMIT)
+.swarm/*.db
+.swarm/*.db-shm
+.swarm/*.db-wal
+.claude-flow/metrics/
+.hive-mind/*.db
+.hive-mind/*.db-shm
+.hive-mind/*.db-wal
+.hive-mind/sessions/
+memory/claude-flow*.json
+memory/sessions/*.json
