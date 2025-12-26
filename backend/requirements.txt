@@ -1,0 +1,21 @@
+# FastAPI Backend Dependencies
+# Video Transcription Service
+
+# Core Framework
+fastapi>=0.109.0,<1.0.0
+uvicorn[standard]>=0.27.0,<1.0.0
+
+# File Handling
+python-multipart>=0.0.6,<1.0.0
+aiofiles>=23.2.1,<24.0.0
+
+# Data Validation (included with FastAPI but pinned for clarity)
+pydantic>=2.5.0,<3.0.0
+
+# Optional: Production ASGI Server
+# gunicorn>=21.0.0,<22.0.0
+
+# Optional: For actual transcription (add when implementing)
+# openai-whisper>=20231117
+# torch>=2.0.0
+# torchaudio>=2.0.0
