@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Rate limit exceeded. You are sending requests too quickly. Please slow down.",
+    "type": "rate_limit_error",
+    "code": "rate_limit_exceeded",
+    "param": null
+  }
+}

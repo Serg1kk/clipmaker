@@ -1,0 +1,21 @@
+{
+  "id": "gen-abc123def456",
+  "model": "google/gemini-2.5-pro-preview",
+  "object": "chat.completion",
+  "created": 1703644800,
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"clips\":[{\"start_time\":125.5,\"end_time\":158.2,\"duration\":32.7,\"score\":0.92,\"reasoning\":\"Engaging story with emotional hook about personal transformation\",\"hook_type\":\"story\",\"topics\":[\"personal growth\",\"motivation\"],\"transcript_excerpt\":\"And that's when I realized everything was about to change...\"},{\"start_time\":456.0,\"end_time\":498.7,\"duration\":42.7,\"score\":0.88,\"reasoning\":\"Controversial opinion with high debate potential\",\"hook_type\":\"controversy\",\"topics\":[\"technology\",\"AI ethics\"],\"transcript_excerpt\":\"I completely disagree with the mainstream view...\"}]}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 2500,
+    "completion_tokens": 350,
+    "total_tokens": 2850
+  }
+}

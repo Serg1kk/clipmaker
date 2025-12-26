@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "Invalid API key provided. Please check your API key and try again.",
+    "type": "authentication_error",
+    "code": "invalid_api_key",
+    "param": null
+  }
+}

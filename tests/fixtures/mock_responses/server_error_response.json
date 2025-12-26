@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "An unexpected error occurred on our servers. Please try again later.",
+    "type": "server_error",
+    "code": "internal_error",
+    "param": null
+  }
+}
