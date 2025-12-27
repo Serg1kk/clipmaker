@@ -226,44 +226,23 @@ const ProjectEditor = () => {
   }, [project]);
 
   // Restore selected moment state from project on initial load
+  // NOTE: Template and crop settings are PROJECT-WIDE (from localStorage), not per-moment!
   useEffect(() => {
     if (!project?.moments || project.moments.length === 0) return;
 
-    // If we have a saved current_moment_id, restore it
+    // If we have a saved current_moment_id, restore only the moment selection
+    // (template and crop coords come from localStorage, not from moment)
     if (project.current_moment_id && !selectedMomentId) {
       const savedMoment = project.moments.find(m => m.id === project.current_moment_id);
       if (savedMoment) {
         setSelectedMomentId(savedMoment.id);
         setSelectedRange({ start: savedMoment.start, end: savedMoment.end });
-
-        // Restore crop settings
-        if (savedMoment.crop_template) {
-          setCropTemplate(savedMoment.crop_template as TemplateType);
-        }
-        if (savedMoment.crop_coordinates) {
-          setCropCoordinates(savedMoment.crop_coordinates as NormalizedCropCoordinates[]);
-        }
-
-        // Restore subtitle settings: moment config > localStorage cache
-        if (savedMoment.subtitle_config) {
-          const cfg = savedMoment.subtitle_config as Record<string, unknown>;
-          setTextStyle({
-            subtitlesEnabled: cfg.enabled as boolean ?? true,
-            fontFamily: (cfg.font_family as FontFamily) ?? DEFAULT_TEXT_STYLE.fontFamily,
-            fontSize: cfg.font_size as number ?? DEFAULT_TEXT_STYLE.fontSize,
-            textColor: cfg.text_color as string ?? DEFAULT_TEXT_STYLE.textColor,
-            position: (cfg.position as TextPosition) ?? DEFAULT_TEXT_STYLE.position,
-          });
-        } else if (projectId) {
-          // Try localStorage cache for project-wide subtitle settings
-          const cachedStyle = loadSubtitleFromCache(projectId);
-          if (cachedStyle) {
-            setTextStyle(cachedStyle);
-          }
-        }
+        // Template is loaded separately from localStorage (useEffect below)
+        // Crop coordinates are loaded separately from localStorage per-template
+        // Subtitle settings are loaded separately from localStorage
       }
     }
-  }, [project?.moments, project?.current_moment_id, selectedMomentId, projectId]);
+  }, [project?.moments, project?.current_moment_id, selectedMomentId]);
 
   // Load subtitle settings from localStorage on initial project load (no moment selected yet)
   useEffect(() => {
@@ -274,12 +253,20 @@ const ProjectEditor = () => {
     }
   }, [projectId, selectedMomentId]);
 
-  // Load template from localStorage on initial project load
+  // Load template and its crop coordinates from localStorage on initial project load
   useEffect(() => {
     if (!projectId) return;
     const cachedTemplate = loadTemplateFromCache(projectId);
+    const templateToUse = cachedTemplate || '1-frame';
+
     if (cachedTemplate) {
       setCropTemplate(cachedTemplate);
+    }
+
+    // Also load crop coordinates for this template
+    const cachedCoords = loadCropFromCache(projectId, templateToUse);
+    if (cachedCoords) {
+      setCropCoordinates(cachedCoords);
     }
   }, [projectId]);
 
@@ -784,51 +771,24 @@ const ProjectEditor = () => {
         end: marker.endTime ?? 0
       });
 
-      // Load the moment's saved settings
-      const moment = project?.moments?.find(m => m.id === marker.id);
-      if (moment) {
-        // Keep current template if moment has no saved template (don't reset!)
-        // Only override template if moment explicitly has one saved
-        const templateToUse = moment.crop_template
-          ? (moment.crop_template as TemplateType)
-          : cropTemplate; // Keep current user-selected template
-
-        if (moment.crop_template) {
-          setCropTemplate(moment.crop_template as TemplateType);
+      // Load settings - template NEVER changes when switching moments!
+      // Only load crop coordinates for the CURRENT selected template
+      if (projectId) {
+        // Template stays the same (cropTemplate) - never change it on moment switch
+        // Load crop coordinates from localStorage cache for current template
+        const cachedCoords = loadCropFromCache(projectId, cropTemplate);
+        if (cachedCoords) {
+          setCropCoordinates(cachedCoords);
         }
-        // Note: if moment has no crop_template, we keep the current cropTemplate (no setCropTemplate call)
+        // If no cache, keep current coordinates (don't reset to empty)
 
-        // Priority: moment's own coordinates > localStorage cache > keep current (don't reset)
-        if (moment.crop_coordinates && Array.isArray(moment.crop_coordinates) && moment.crop_coordinates.length > 0) {
-          // Moment has its own saved coordinates - use them
-          setCropCoordinates(moment.crop_coordinates as NormalizedCropCoordinates[]);
-        } else if (projectId) {
-          // Try to load from localStorage cache for this template (current template, not moment's)
-          const cachedCoords = loadCropFromCache(projectId, templateToUse);
-          if (cachedCoords) {
-            setCropCoordinates(cachedCoords);
-          }
-          // If no cache either, keep current coordinates (don't reset to empty)
+        // Subtitle settings: load from project-wide localStorage cache
+        // (subtitle settings are per-project, not per-moment)
+        const cachedStyle = loadSubtitleFromCache(projectId);
+        if (cachedStyle) {
+          setTextStyle(cachedStyle);
         }
-
-        // Restore subtitle settings: moment config > localStorage cache > default
-        if (moment.subtitle_config) {
-          const cfg = moment.subtitle_config as Record<string, unknown>;
-          setTextStyle({
-            subtitlesEnabled: cfg.enabled as boolean ?? true,
-            fontFamily: (cfg.font_family as FontFamily) ?? DEFAULT_TEXT_STYLE.fontFamily,
-            fontSize: cfg.font_size as number ?? DEFAULT_TEXT_STYLE.fontSize,
-            textColor: cfg.text_color as string ?? DEFAULT_TEXT_STYLE.textColor,
-            position: (cfg.position as TextPosition) ?? DEFAULT_TEXT_STYLE.position,
-          });
-        } else if (projectId) {
-          // Try localStorage cache for project-wide subtitle settings
-          const cachedStyle = loadSubtitleFromCache(projectId);
-          if (cachedStyle) {
-            setTextStyle(cachedStyle);
-          }
-          // If no cache, keep current settings (don't reset)
-        }
+        // If no cache, keep current settings (don't reset)
       }
 
       // Save current_moment_id to project for state persistence
