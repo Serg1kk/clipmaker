@@ -843,8 +843,8 @@ const ProjectEditor = () => {
         <div className="grid h-[calc(100vh-120px)] overflow-hidden" style={{ gridTemplateColumns: '50% 25% 25%' }}>
           {/* Left Column (50%): Source Video with CropOverlay + Timeline */}
           <div className="flex flex-col min-h-0 pr-3">
-            {/* Source Video Container with CropOverlay */}
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col flex-1 min-h-0">
+            {/* Source Video Container with CropOverlay - FIXED SIZE */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col flex-shrink-0">
               <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -852,12 +852,21 @@ const ProjectEditor = () => {
                 Source Video
                 <span className="text-xs text-gray-500 ml-auto">Drag frames to adjust crop</span>
               </h4>
-              <div className="flex-1 bg-gray-900 rounded-lg overflow-hidden relative min-h-0">
+              {/* Video wrapper with FIXED aspect ratio - prevents size jumping on template change */}
+              <div
+                className="bg-gray-900 rounded-lg overflow-hidden relative w-full"
+                style={{
+                  aspectRatio: sourceVideoDimensions
+                    ? `${sourceVideoDimensions.width} / ${sourceVideoDimensions.height}`
+                    : '16 / 9',
+                  maxHeight: 'calc(50vh - 60px)'
+                }}
+              >
                 {/* Video Element - controls hidden when CropOverlay is active */}
                 <video
                   ref={videoRef}
                   src={getVideoUrl(project.video_path!)}
-                  className="w-full h-full object-contain"
+                  className="absolute inset-0 w-full h-full object-contain"
                   onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                   onLoadedMetadata={(e) => {
                     setVideoDuration(e.currentTarget.duration);

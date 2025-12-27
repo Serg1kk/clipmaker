@@ -79,19 +79,23 @@ const CropRectangle = ({
 
   const colorTheme = RECTANGLE_COLORS[color];
 
-  // Handle drag events
+  // Handle drag events - constrain within container bounds
   const handleDrag = useCallback(
     (_e: DraggableEvent, data: DraggableData) => {
       if (disabled || resizeState.isResizing) return;
 
+      // Constrain position to keep rectangle fully inside container
+      const constrainedX = Math.max(0, Math.min(data.x, containerBounds.width - coordinates.width));
+      const constrainedY = Math.max(0, Math.min(data.y, containerBounds.height - coordinates.height));
+
       const newCoords: CropCoordinates = {
         ...coordinates,
-        x: data.x,
-        y: data.y
+        x: constrainedX,
+        y: constrainedY
       };
       onChange(newCoords);
     },
-    [coordinates, onChange, disabled, resizeState.isResizing]
+    [coordinates, containerBounds, onChange, disabled, resizeState.isResizing]
   );
 
   // Handle resize start

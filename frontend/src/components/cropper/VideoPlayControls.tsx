@@ -90,7 +90,7 @@ const VideoPlayControls = ({
 
   return (
     <div
-      className={`absolute top-3 left-3 z-50 flex items-center gap-2 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 ${className}`}
+      className={`absolute bottom-3 left-3 z-50 flex items-center gap-2 bg-black/80 backdrop-blur-sm rounded-lg px-3 py-2 shadow-lg ${className}`}
       data-testid="video-play-controls"
     >
       {/* Skip Back Button */}

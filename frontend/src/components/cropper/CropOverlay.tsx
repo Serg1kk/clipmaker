@@ -74,20 +74,28 @@ function generateInitialCoordinates(
 }
 
 /**
- * Normalize coordinates to 0-1 range
+ * Normalize coordinates to 0-1 range, clamping to valid bounds
  */
 function normalizeCoordinates(
   coords: CropCoordinates[],
   containerWidth: number,
   containerHeight: number
 ): NormalizedCropCoordinates[] {
-  return coords.map((coord) => ({
-    id: coord.id,
-    x: containerWidth > 0 ? coord.x / containerWidth : 0,
-    y: containerHeight > 0 ? coord.y / containerHeight : 0,
-    width: containerWidth > 0 ? coord.width / containerWidth : 0,
-    height: containerHeight > 0 ? coord.height / containerHeight : 0
-  }));
+  return coords.map((coord) => {
+    // Clamp pixel coordinates to container bounds before normalizing
+    const clampedX = Math.max(0, Math.min(coord.x, containerWidth - coord.width));
+    const clampedY = Math.max(0, Math.min(coord.y, containerHeight - coord.height));
+    const clampedWidth = Math.min(coord.width, containerWidth - clampedX);
+    const clampedHeight = Math.min(coord.height, containerHeight - clampedY);
+
+    return {
+      id: coord.id,
+      x: containerWidth > 0 ? clampedX / containerWidth : 0,
+      y: containerHeight > 0 ? clampedY / containerHeight : 0,
+      width: containerWidth > 0 ? clampedWidth / containerWidth : 0,
+      height: containerHeight > 0 ? clampedHeight / containerHeight : 0
+    };
+  });
 }
 
 /**
@@ -181,14 +189,27 @@ const CropOverlay = ({
     if (containerSize.width === 0 || containerSize.height === 0) return;
 
     if (initialCoordinates && initialCoordinates.length === templateConfig.count) {
-      // Convert normalized coordinates to pixel coordinates
-      const pixelCoords = initialCoordinates.map((coord, index) => ({
-        id: coord.id || `crop-${index + 1}`,
-        x: coord.x * containerSize.width,
-        y: coord.y * containerSize.height,
-        width: coord.width * containerSize.width,
-        height: coord.height * containerSize.height,
-      }));
+      // Convert normalized coordinates to pixel coordinates with bounds clamping
+      const pixelCoords = initialCoordinates.map((coord, index) => {
+        const rawX = coord.x * containerSize.width;
+        const rawY = coord.y * containerSize.height;
+        const rawWidth = coord.width * containerSize.width;
+        const rawHeight = coord.height * containerSize.height;
+
+        // Clamp to ensure crop stays within container bounds
+        const clampedWidth = Math.min(rawWidth, containerSize.width);
+        const clampedHeight = Math.min(rawHeight, containerSize.height);
+        const clampedX = Math.max(0, Math.min(rawX, containerSize.width - clampedWidth));
+        const clampedY = Math.max(0, Math.min(rawY, containerSize.height - clampedHeight));
+
+        return {
+          id: coord.id || `crop-${index + 1}`,
+          x: clampedX,
+          y: clampedY,
+          width: clampedWidth,
+          height: clampedHeight,
+        };
+      });
       setCoordinates(pixelCoords);
     } else {
       const newCoords = generateInitialCoordinates(
@@ -205,13 +226,27 @@ const CropOverlay = ({
     }
   }, [template, containerSize, templateConfig.count, initialCoordinates, onNormalizedCropChange]);
 
-  // Handle coordinate changes
+  // Handle coordinate changes with bounds enforcement
   const handleCoordinateChange = useCallback(
     (updatedCoord: CropCoordinates) => {
       setCoordinates((prev) => {
-        const newCoords = prev.map((coord) =>
-          coord.id === updatedCoord.id ? updatedCoord : coord
-        );
+        const newCoords = prev.map((coord) => {
+          if (coord.id !== updatedCoord.id) return coord;
+
+          // Enforce bounds: crop must stay fully inside container
+          const clampedWidth = Math.min(updatedCoord.width, containerSize.width);
+          const clampedHeight = Math.min(updatedCoord.height, containerSize.height);
+          const clampedX = Math.max(0, Math.min(updatedCoord.x, containerSize.width - clampedWidth));
+          const clampedY = Math.max(0, Math.min(updatedCoord.y, containerSize.height - clampedHeight));
+
+          return {
+            ...updatedCoord,
+            x: clampedX,
+            y: clampedY,
+            width: clampedWidth,
+            height: clampedHeight,
+          };
+        });
 
         // Notify parent components
         onNormalizedCropChange?.(
