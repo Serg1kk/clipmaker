@@ -945,6 +945,7 @@ class RenderService:
             )
 
             # Step 2: Apply compositing (if enabled)
+            composite_video_info = video_info  # Default to source video info
             if request.enable_composite and request.composite_request:
                 if progress_callback:
                     progress_callback(RenderProgress(
@@ -955,15 +956,35 @@ class RenderService:
                         message="Applying video composite...",
                     ))
 
-                # Update composite request to use extracted clip
+                # Update composite request output to temp directory
                 composite_output = temp_path / "composited.mp4"
+                # Create a copy of the request with temp output path
+                from models.composite_schemas import CompositeRequest as CompReq
+                composite_req_dict = request.composite_request.model_dump()
+                composite_req_dict["output_path"] = str(composite_output)
+                temp_composite_request = CompReq(**composite_req_dict)
+
                 current_video = await self._composite_service.composite_video(
-                    request.composite_request,
+                    temp_composite_request,
                 )
 
-            # Step 3: Generate and burn subtitles
+                # Update video info for composite dimensions (9:16 vertical)
+                template = request.composite_request.template
+                # Create a mock VideoInfo with composite dimensions for subtitle generation
+                composite_video_info = VideoInfo(
+                    width=template.output_width,
+                    height=template.output_height,
+                    duration=video_info.duration,
+                    fps=template.output_fps,
+                    codec=video_info.codec,
+                    audio_codec=video_info.audio_codec,
+                    bitrate=video_info.bitrate,
+                )
+                logger.info(f"Composite output: {template.output_width}x{template.output_height}")
+
+            # Step 3: Generate and burn subtitles (use composite dimensions if compositing was applied)
             subtitle_path = await self._generate_subtitle_file(
-                request, video_info, temp_path
+                request, composite_video_info, temp_path
             )
 
             if subtitle_path:

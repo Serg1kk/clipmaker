@@ -1266,6 +1266,10 @@ def build_composite_request(
     """
     Build a CompositeRequest for 2-frame or 3-frame templates.
 
+    Template layouts (matching frontend TEMPLATE_CONFIGS):
+    - 2-frame: Two 1080x960 slots stacked vertically (9:8 each)
+    - 3-frame: Two 540x480 slots on top (side-by-side) + one 1080x1440 at bottom
+
     Args:
         source_video_path: Path to source video
         crop_template: Template type ("1-frame", "2-frame", "3-frame")
@@ -1289,7 +1293,7 @@ def build_composite_request(
         AudioMixMode,
     )
 
-    if crop_template == "1-frame" or not crop_coordinates:
+    if not crop_coordinates:
         return None
 
     # Output dimensions (9:16 vertical)
@@ -1297,37 +1301,44 @@ def build_composite_request(
     output_height = 1920
 
     # Determine slot configuration based on template
-    if crop_template == "2-frame":
-        # 2 slots stacked vertically, each 1080x960
-        slot_height = 960
-        slot_count = 2
+    # These MUST match frontend/src/constants/templates.ts exactly
+    if crop_template == "1-frame":
+        # Single full-screen frame: 1080x1920 (9:16)
+        # The crop area defines what part of source video fills the whole output
         slot_configs = [
-            {"slot_id": "top", "name": "Top Video", "y": 0},
-            {"slot_id": "bottom", "name": "Bottom Video", "y": 960},
+            {"slot_id": "frame-1", "name": "Full Frame", "x": 0, "y": 0, "width": 1080, "height": 1920},
+        ]
+    elif crop_template == "2-frame":
+        # 2 slots stacked vertically, each 1080x960 (9:8 aspect ratio)
+        slot_configs = [
+            {"slot_id": "frame-1", "name": "Top Frame", "x": 0, "y": 0, "width": 1080, "height": 960},
+            {"slot_id": "frame-2", "name": "Bottom Frame", "x": 0, "y": 960, "width": 1080, "height": 960},
         ]
     elif crop_template == "3-frame":
-        # 3 slots stacked vertically, each 1080x640
-        slot_height = 640
-        slot_count = 3
+        # 3-frame layout: Two small frames on top, one large frame at bottom
+        # Matches frontend TEMPLATE_3_FRAME exactly:
+        #   frame-1: 540x480 at (0, 0) - TOP LEFT
+        #   frame-2: 540x480 at (540, 0) - TOP RIGHT
+        #   frame-3: 1080x1440 at (0, 480) - BOTTOM (large)
         slot_configs = [
-            {"slot_id": "top", "name": "Top Video", "y": 0},
-            {"slot_id": "middle", "name": "Middle Video", "y": 640},
-            {"slot_id": "bottom", "name": "Bottom Video", "y": 1280},
+            {"slot_id": "frame-1", "name": "Top Left", "x": 0, "y": 0, "width": 540, "height": 480},
+            {"slot_id": "frame-2", "name": "Top Right", "x": 540, "y": 0, "width": 540, "height": 480},
+            {"slot_id": "frame-3", "name": "Bottom Main", "x": 0, "y": 480, "width": 1080, "height": 1440},
         ]
     else:
         return None
 
     # Create template slots
     slots = []
-    for cfg in slot_configs:
+    for i, cfg in enumerate(slot_configs):
         slots.append(TemplateSlot(
             slot_id=cfg["slot_id"],
             name=cfg["name"],
-            x=0,
+            x=cfg["x"],
             y=cfg["y"],
-            width=output_width,
-            height=slot_height,
-            z_order=0,
+            width=cfg["width"],
+            height=cfg["height"],
+            z_order=i,  # Layer order
             scale_mode=ScaleMode.FILL,
         ))
 
@@ -1343,18 +1354,37 @@ def build_composite_request(
         slots=slots,
     )
 
+    # Create lookup dictionary for crop coordinates by frame ID
+    # Frontend stores as: [{"id": "frame-1", "x": 0.1, "y": 0.2, ...}, ...]
+    crop_by_id = {}
+    for crop in crop_coordinates:
+        frame_id = crop.get("id", "")
+        if frame_id:
+            crop_by_id[frame_id] = crop
+
+    logger.info(f"Crop coordinates by ID: {list(crop_by_id.keys())}")
+    logger.info(f"Slot configs: {[cfg['slot_id'] for cfg in slot_configs]}")
+
     # Create video sources from crop coordinates
     sources = []
     for i, slot_cfg in enumerate(slot_configs):
-        # Get crop coordinates for this slot (use index if available, else first)
-        crop_idx = i if i < len(crop_coordinates) else 0
-        crop = crop_coordinates[crop_idx]
+        slot_id = slot_cfg["slot_id"]
+
+        # Find crop coordinates by matching slot_id (e.g., "frame-1" -> "frame-1")
+        crop = crop_by_id.get(slot_id)
+        if not crop:
+            # Fallback to index-based lookup for backwards compatibility
+            crop_idx = i if i < len(crop_coordinates) else 0
+            crop = crop_coordinates[crop_idx]
+            logger.warning(f"No crop found for slot {slot_id}, using index {crop_idx}")
 
         # Convert normalized coordinates (0-1) to pixels
         norm_x = crop.get("x", 0)
         norm_y = crop.get("y", 0)
         norm_width = crop.get("width", 1)
         norm_height = crop.get("height", 1)
+
+        logger.info(f"Slot {slot_id}: crop norm=({norm_x:.3f}, {norm_y:.3f}, {norm_width:.3f}, {norm_height:.3f})")
 
         crop_x = int(norm_x * video_width)
         crop_y = int(norm_y * video_height)
@@ -1505,6 +1535,25 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
             # Fall back to request-level config
             subtitle_cfg = SubtitleConfig(**request.subtitle_config)
 
+        # =================================================================
+        # Scale font_size for output resolution
+        # Frontend preview: width=180px, uses fontSize * 0.35
+        # Output video: width=1080px
+        # Scale factor: (1080 / 180) * 0.35 = 2.1 (but capped for readability)
+        # =================================================================
+        PREVIEW_WIDTH = 180
+        OUTPUT_WIDTH = 1080
+        PREVIEW_FONT_SCALE = 0.35
+
+        # Calculate scaled font size: preview_font * (output_width / preview_width)
+        # = user_font * 0.35 * (1080 / 180) = user_font * 2.1
+        # Cap at reasonable max to prevent overflow
+        original_font_size = subtitle_cfg.font_size
+        scaled_font_size = int(original_font_size * PREVIEW_FONT_SCALE * (OUTPUT_WIDTH / PREVIEW_WIDTH))
+        scaled_font_size = min(max(scaled_font_size, 24), 200)  # Clamp between 24-200px
+        subtitle_cfg = subtitle_cfg.model_copy(update={"font_size": scaled_font_size})
+        logger.info(f"Scaled font size: {original_font_size} -> {scaled_font_size} for {OUTPUT_WIDTH}px output")
+
         # Build audio config
         audio_cfg = AudioConfig()
         if request.audio_config:
@@ -1529,13 +1578,15 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
         logger.info(f"Source video: {video_width}x{video_height}")
 
         # =================================================================
-        # Build CompositeRequest for multi-frame templates
+        # Build CompositeRequest for all templates with crop coordinates
         # =================================================================
         composite_request = None
         enable_composite = False
         crop_template = moment_data.crop_template or "1-frame"
 
-        if crop_template in ("2-frame", "3-frame") and moment_data.crop_coordinates:
+        # Build composite for ANY template that has crop coordinates
+        # This ensures the crop is applied and output is 9:16 (1080x1920)
+        if moment_data.crop_coordinates:
             composite_request = build_composite_request(
                 source_video_path=source_video_path,
                 crop_template=crop_template,

@@ -918,9 +918,9 @@ const ProjectEditor = () => {
         body: JSON.stringify({
           subtitle_config: {
             enabled: style.subtitlesEnabled,
-            font_family: style.fontFamily,
+            font_name: style.fontFamily,
             font_size: style.fontSize,
-            text_color: style.textColor,
+            primary_color: style.textColor,
             position: style.position,
           },
         }),
