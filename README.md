@@ -456,11 +456,11 @@ Choose a frame layout for your final clip. Templates are displayed as vertical 9
 │  Select video template layout:                                  │
 │                                                                 │
 │        ┌─────┐         ┌─────┐         ┌─────┐                 │
-│        │     │         │ ▀▀▀ │         │▀ ▀  │                 │
-│        │     │         │─────│         │─────│                 │
-│        │  █  │         │     │         │     │                 │
-│        │     │         │ ▄▄▄ │         │  █  │                 │
-│        │     │         │     │         │     │                 │
+│        │     │         │ ━━━ │         │ ■ ■ │                 │
+│        │     │         │     │         │─────│                 │
+│        │  █  │         │─────│         │     │                 │
+│        │     │         │     │         │ ███ │                 │
+│        │     │         │ ━━━ │         │     │                 │
 │        └─────┘         └─────┘         └─────┘                 │
 │       1-Frame          2-Frame         3-Frame                  │
 │       [✓ Selected]                                              │
