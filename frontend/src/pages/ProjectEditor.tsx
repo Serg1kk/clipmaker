@@ -26,7 +26,8 @@ import type { Project } from '../components/ProjectCard';
 import VideoFilePicker from '../components/VideoFilePicker';
 import VideoTimeline from '../components/timeline/VideoTimeline';
 import MomentsSidebar from '../components/MomentsSidebar';
-import PreviewLayoutWithCropper from '../components/cropper/PreviewLayoutWithCropper';
+import PreviewLayout from '../components/cropper/PreviewLayout';
+import CropOverlay from '../components/cropper/CropOverlay';
 import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE, FontFamily, TextPosition } from '../components/TextStylingPanel';
 import { TimelineMarker, TimeRange, engagingMomentToMarker } from '../components/timeline/types';
 import type { VideoFileMetadata } from '../services/api';
@@ -336,46 +337,58 @@ const ProjectEditor = () => {
       const data = await response.json();
       const jobId = data.job_id;
 
-      // Poll job status every 2 seconds for progress updates
-      let pollInterval: ReturnType<typeof setInterval> | null = null;
-      const startPolling = () => {
-        pollInterval = setInterval(async () => {
-          try {
-            const statusRes = await fetch(`${API_BASE}/transcribe/${jobId}`);
-            if (statusRes.ok) {
-              const status = await statusRes.json();
-              if (status.status === 'processing' || status.status === 'pending') {
-                // Determine stage based on progress
-                let stage = 'Transcribing';
-                if (status.progress < 25) stage = 'Extracting Audio';
-                else if (status.progress >= 85) stage = 'Processing';
+      // Simulated progress animation (Whisper doesn't report intermediate progress)
+      let simulatedProgress = 0;
+      let simulationInterval: ReturnType<typeof setInterval> | null = null;
 
-                setTranscribeProgress({
-                  stage,
-                  progress: status.progress || 0,
-                  message: status.progress < 25
-                    ? 'Extracting audio from video...'
-                    : status.progress >= 85
-                      ? 'Processing results...'
-                      : 'Transcribing audio...',
-                });
-              }
-            }
-          } catch (e) {
-            console.error('Poll error:', e);
+      const startSimulation = () => {
+        simulationInterval = setInterval(() => {
+          // Slowly increment progress, slowing down as we approach 85%
+          if (simulatedProgress < 25) {
+            // Extraction phase: quick
+            simulatedProgress += 2;
+          } else if (simulatedProgress < 50) {
+            // Early transcription: moderate
+            simulatedProgress += 0.8;
+          } else if (simulatedProgress < 70) {
+            // Mid transcription: slower
+            simulatedProgress += 0.4;
+          } else if (simulatedProgress < 82) {
+            // Late transcription: very slow (asymptotic approach)
+            simulatedProgress += 0.15;
           }
-        }, 2000);
+          // Cap at 82% - real completion will jump to 100%
+          simulatedProgress = Math.min(simulatedProgress, 82);
+
+          let stage = 'Transcribing';
+          let message = 'Transcribing audio...';
+          if (simulatedProgress < 25) {
+            stage = 'Extracting Audio';
+            message = 'Extracting audio from video...';
+          } else if (simulatedProgress >= 80) {
+            message = 'Almost done, processing audio...';
+          }
+
+          setTranscribeProgress({
+            stage,
+            progress: Math.round(simulatedProgress),
+            message,
+          });
+        }, 500);
       };
-      startPolling();
+      startSimulation();
 
       connectWebSocket(jobId,
         (progress) => {
-          // WebSocket updates override polling
+          // Real WebSocket updates - use actual progress if higher
+          if (progress.progress > simulatedProgress) {
+            simulatedProgress = progress.progress;
+          }
           setTranscribeProgress(progress);
         },
         async () => {
-          // Stop polling on completion
-          if (pollInterval) clearInterval(pollInterval);
+          // Stop simulation on completion
+          if (simulationInterval) clearInterval(simulationInterval);
 
           // Fetch transcription result and save to project
           try {
