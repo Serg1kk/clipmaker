@@ -6,10 +6,44 @@ Uses the existing JSONFileStorage for persistence.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, ConfigDict
+
+
+class TranscriptionSegment(BaseModel):
+    """A segment of transcribed text with timing."""
+    id: int = Field(..., description="Segment ID")
+    start: float = Field(..., ge=0.0, description="Start time in seconds")
+    end: float = Field(..., ge=0.0, description="End time in seconds")
+    text: str = Field(..., description="Transcribed text")
+    words: list[dict] = Field(default_factory=list, description="Word-level timestamps")
+
+
+class TranscriptionData(BaseModel):
+    """Complete transcription data for a video."""
+    text: str = Field(..., description="Full transcription text")
+    segments: list[TranscriptionSegment] = Field(default_factory=list, description="Segments with timing")
+    language: str = Field(default="en", description="Detected language")
+    duration: float = Field(default=0.0, ge=0.0, description="Video duration in seconds")
+
+
+class MomentData(BaseModel):
+    """An AI-detected engaging moment."""
+    id: str = Field(..., description="Unique moment ID")
+    start: float = Field(..., ge=0.0, description="Start time in seconds")
+    end: float = Field(..., ge=0.0, description="End time in seconds")
+    reason: str = Field(..., description="Why this moment is engaging")
+    text: str = Field(default="", description="Transcript text for this moment")
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="Confidence score")
+    # Crop data per moment
+    crop_template: Optional[str] = Field(default="1-frame", description="Crop template type")
+    crop_coordinates: list[dict] = Field(default_factory=list, description="Normalized crop coordinates")
+    # Subtitle settings per moment
+    subtitle_config: dict = Field(default_factory=dict, description="Subtitle styling config")
+    # Rendered clip path
+    rendered_path: Optional[str] = Field(default=None, description="Path to rendered clip")
 
 
 class ProjectBase(BaseModel):
@@ -19,6 +53,10 @@ class ProjectBase(BaseModel):
     video_path: Optional[str] = Field(None, description="Path to source video file")
     tags: list[str] = Field(default_factory=list, description="Project tags")
     metadata: dict = Field(default_factory=dict, description="Additional project metadata")
+    # Transcription data (persisted after transcription)
+    transcription: Optional[TranscriptionData] = Field(default=None, description="Transcription result")
+    # AI moments (persisted after finding moments)
+    moments: list[MomentData] = Field(default_factory=list, description="AI-detected engaging moments")
 
 
 class ProjectCreate(ProjectBase):
@@ -33,6 +71,8 @@ class ProjectUpdate(BaseModel):
     video_path: Optional[str] = Field(None, description="Path to source video file")
     tags: Optional[list[str]] = Field(None, description="Project tags")
     metadata: Optional[dict] = Field(None, description="Additional project metadata")
+    transcription: Optional[TranscriptionData] = Field(None, description="Transcription result")
+    moments: Optional[list[MomentData]] = Field(None, description="AI-detected engaging moments")
 
 
 class Project(ProjectBase):

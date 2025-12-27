@@ -1146,12 +1146,12 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
             current_step=1,
         )
 
-        # Load project from storage
-        from models.transcription_moment import ProjectTranscriptionMoment
+        # Load project from storage (use same path as projects API)
+        from models.project import Project, MomentData
 
         project_storage = JSONFileStorage(
-            base_path="data/projects",
-            model_class=ProjectTranscriptionMoment,
+            base_path="data/projects_api",
+            model_class=Project,
             auto_create_dir=True,
         )
 
@@ -1160,9 +1160,14 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
         except EntityNotFoundError:
             raise ValueError(f"Project not found: {request.project_id}")
 
-        # Find the moment
-        moment = project.get_moment_by_id(request.moment_id)
-        if not moment:
+        # Find the moment by ID
+        moment_data: MomentData | None = None
+        for m in project.moments:
+            if m.id == request.moment_id:
+                moment_data = m
+                break
+
+        if not moment_data:
             raise ValueError(f"Moment not found: {request.moment_id}")
 
         # Get video path from project
@@ -1178,7 +1183,7 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
         await tracker.update_progress(
             stage=RenderProgressStage.LOADING.value,
             progress=10.0,
-            message=f"Loaded moment: {moment.text[:50]}...",
+            message=f"Loaded moment: {moment_data.text[:50]}..." if moment_data.text else "Loaded moment",
             current_step=1,
         )
 
@@ -1197,9 +1202,17 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
         if request.audio_config:
             audio_cfg = AudioConfig(**request.audio_config)
 
+        # Convert MomentData to TranscriptionMoment for RenderService
+        render_moment = TranscriptionMoment(
+            id=moment_data.id,
+            start_time=moment_data.start,
+            end_time=moment_data.end,
+            text=moment_data.text,
+        )
+
         # Create render request
         render_request = RenderRequest(
-            moment=moment,
+            moment=render_moment,
             source_video_path=source_video_path,
             subtitle_words=subtitle_words,
             subtitle_config=subtitle_cfg,
@@ -1247,6 +1260,22 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
         job.message = "Render completed successfully"
         job.output_path = str(output_path)
         job.updated_at = datetime.utcnow()
+
+        # Save rendered_path back to the moment in project
+        try:
+            from models.project import ProjectUpdate
+            # Update the moment's rendered_path
+            for m in project.moments:
+                if m.id == request.moment_id:
+                    m.rendered_path = str(output_path)
+                    break
+            # Save updated project
+            update = ProjectUpdate(moments=project.moments)
+            updated_project = project.apply_update(update)
+            project_storage.save(request.project_id, updated_project)
+            logger.info(f"Saved rendered_path to moment {request.moment_id}")
+        except Exception as save_err:
+            logger.warning(f"Failed to save rendered_path to project: {save_err}")
 
         logger.info(f"Render completed for job {job_id}: {output_path}")
 

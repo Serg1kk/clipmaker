@@ -1,21 +1,118 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Project } from '../components/ProjectCard';
 import VideoFilePicker from '../components/VideoFilePicker';
-import VideoPlayer from '../components/VideoPlayer';
+import VideoTimeline from '../components/timeline/VideoTimeline';
+import MomentsSidebar from '../components/MomentsSidebar';
+import PreviewLayoutWithCropper from '../components/cropper/PreviewLayoutWithCropper';
+import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE } from '../components/TextStylingPanel';
+import { TimelineMarker, TimeRange, engagingMomentToMarker } from '../components/timeline/types';
 import type { VideoFileMetadata } from '../services/api';
+import type { NormalizedCropCoordinates } from '../components/cropper/types';
+import type { TemplateType } from '../components/TemplateSelector';
 
 const API_BASE = '';
+
+// Workflow stages
+type WorkflowStage = 'select-video' | 'transcribe' | 'find-moments' | 'edit-moments' | 'render';
+
+// Extended Project type with transcription and moments
+interface ExtendedProject extends Project {
+  transcription?: {
+    text: string;
+    segments: Array<{
+      id: number;
+      start: number;
+      end: number;
+      text: string;
+      words: Array<{ word: string; start: number; end: number }>;
+    }>;
+    language: string;
+    duration: number;
+  };
+  moments?: Array<{
+    id: string;
+    start: number;
+    end: number;
+    reason: string;
+    text: string;
+    confidence: number;
+    crop_template?: string;
+    crop_coordinates?: Array<{ id: string; x: number; y: number; width: number; height: number }>;
+    subtitle_config?: Record<string, unknown>;
+    rendered_path?: string | null;
+  }>;
+}
+
+// Progress state for jobs
+interface JobProgress {
+  stage: string;
+  progress: number;
+  message: string;
+}
 
 const ProjectEditor = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<ExtendedProject | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showVideoPicker, setShowVideoPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Workflow state
+  const [currentStage, setCurrentStage] = useState<WorkflowStage>('select-video');
+  const [transcribeProgress, setTranscribeProgress] = useState<JobProgress | null>(null);
+  const [momentsProgress, setMomentsProgress] = useState<JobProgress | null>(null);
+  const [renderProgress, setRenderProgress] = useState<JobProgress | null>(null);
+
+  // Moment editing state
+  const [selectedMomentId, setSelectedMomentId] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [selectedRange, setSelectedRange] = useState<TimeRange | null>(null);
+  const [textStyle, setTextStyle] = useState<TextStyle>(DEFAULT_TEXT_STYLE);
+  const [cropTemplate, setCropTemplate] = useState<TemplateType>('1-frame');
+  const [cropCoordinates, setCropCoordinates] = useState<NormalizedCropCoordinates[]>([]);
+
+  // Refs
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Determine workflow stage based on project state
+  useEffect(() => {
+    if (!project) return;
+
+    if (!project.video_path) {
+      setCurrentStage('select-video');
+    } else if (!project.transcription) {
+      setCurrentStage('transcribe');
+    } else if (!project.moments || project.moments.length === 0) {
+      setCurrentStage('find-moments');
+    } else {
+      setCurrentStage('edit-moments');
+    }
+  }, [project]);
+
+  // Convert project moments to timeline markers
+  const timelineMarkers = useMemo((): TimelineMarker[] => {
+    if (!project?.moments) return [];
+    return project.moments.map((m, i) => engagingMomentToMarker({
+      start: m.start,
+      end: m.end,
+      reason: m.reason,
+      text: m.text,
+      confidence: m.confidence,
+    }, i));
+  }, [project?.moments]);
+
+  // Get selected moment
+  const selectedMoment = useMemo(() => {
+    if (!selectedMomentId || !project?.moments) return null;
+    return project.moments.find(m => m.id === selectedMomentId) || null;
+  }, [selectedMomentId, project?.moments]);
+
+  // Fetch project
   useEffect(() => {
     const fetchProject = async () => {
       if (!projectId) return;
@@ -30,7 +127,7 @@ const ProjectEditor = () => {
           throw new Error(`Failed to fetch project: ${response.statusText}`);
         }
 
-        const data: Project = await response.json();
+        const data: ExtendedProject = await response.json();
         setProject(data);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'An error occurred';
@@ -41,6 +138,57 @@ const ProjectEditor = () => {
     };
 
     fetchProject();
+  }, [projectId]);
+
+  // WebSocket connection handler
+  const connectWebSocket = useCallback((jobId: string, onProgress: (progress: JobProgress) => void, onComplete: () => void) => {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = window.location.host;
+    const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/job/${jobId}`);
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }));
+          return;
+        }
+
+        onProgress({
+          stage: data.stage || 'processing',
+          progress: data.progress || 0,
+          message: data.message || '',
+        });
+
+        if (data.stage === 'completed' || data.stage === 'failed') {
+          onComplete();
+          ws.close();
+        }
+      } catch (e) {
+        console.error('WebSocket message error:', e);
+      }
+    };
+
+    ws.onerror = (e) => {
+      console.error('WebSocket error:', e);
+    };
+
+    wsRef.current = ws;
+    return ws;
+  }, []);
+
+  // Refresh project data
+  const refreshProject = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const response = await fetch(`${API_BASE}/projects/${projectId}`);
+      if (response.ok) {
+        const data: ExtendedProject = await response.json();
+        setProject(data);
+      }
+    } catch (e) {
+      console.error('Failed to refresh project:', e);
+    }
   }, [projectId]);
 
   const handleBack = () => {
@@ -54,11 +202,12 @@ const ProjectEditor = () => {
     try {
       const response = await fetch(`${API_BASE}/projects/${projectId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           video_path: video.full_path,
+          // Clear transcription and moments when video changes
+          transcription: null,
+          moments: [],
         }),
       });
 
@@ -66,7 +215,7 @@ const ProjectEditor = () => {
         throw new Error(`Failed to update project: ${response.statusText}`);
       }
 
-      const updatedProject: Project = await response.json();
+      const updatedProject: ExtendedProject = await response.json();
       setProject(updatedProject);
       setShowVideoPicker(false);
     } catch (err) {
@@ -84,11 +233,11 @@ const ProjectEditor = () => {
     try {
       const response = await fetch(`${API_BASE}/projects/${projectId}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           video_path: null,
+          transcription: null,
+          moments: [],
         }),
       });
 
@@ -96,7 +245,7 @@ const ProjectEditor = () => {
         throw new Error(`Failed to update project: ${response.statusText}`);
       }
 
-      const updatedProject: Project = await response.json();
+      const updatedProject: ExtendedProject = await response.json();
       setProject(updatedProject);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to clear video';
@@ -106,38 +255,276 @@ const ProjectEditor = () => {
     }
   }, [projectId, project]);
 
-  /**
-   * Convert local file path to a URL that the video player can load.
-   * The backend serves video files via the /video-stream endpoint.
-   */
+  // Handle transcribe
+  const handleTranscribe = useCallback(async () => {
+    if (!projectId || !project?.video_path) return;
+
+    setTranscribeProgress({ stage: 'starting', progress: 0, message: 'Starting transcription...' });
+
+    try {
+      const response = await fetch(`${API_BASE}/transcribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video_path: project.video_path }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to start transcription: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const jobId = data.job_id;
+
+      connectWebSocket(jobId,
+        (progress) => setTranscribeProgress(progress),
+        async () => {
+          // Fetch transcription result and save to project
+          try {
+            const resultResponse = await fetch(`${API_BASE}/transcribe/${jobId}`);
+            if (resultResponse.ok) {
+              const jobStatus = await resultResponse.json();
+              const result = jobStatus.result_data;
+
+              if (result) {
+                // Save transcription to project
+                await fetch(`${API_BASE}/projects/${projectId}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    transcription: {
+                      text: result.text || '',
+                      segments: result.segments || [],
+                      language: result.language || 'en',
+                      duration: result.duration || 0,
+                    },
+                  }),
+                });
+
+                await refreshProject();
+              }
+            }
+          } catch (e) {
+            console.error('Failed to save transcription:', e);
+          }
+          setTranscribeProgress(null);
+        }
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to transcribe';
+      setError(message);
+      setTranscribeProgress(null);
+    }
+  }, [projectId, project?.video_path, connectWebSocket, refreshProject]);
+
+  // Handle find moments
+  const handleFindMoments = useCallback(async () => {
+    if (!projectId || !project?.transcription) return;
+
+    setMomentsProgress({ stage: 'starting', progress: 0, message: 'Starting AI analysis...' });
+
+    try {
+      const response = await fetch(`${API_BASE}/projects/${projectId}/moments/find`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ min_duration: 13, max_duration: 60 }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to start AI analysis: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const jobId = data.job_id;
+
+      connectWebSocket(jobId,
+        (progress) => setMomentsProgress(progress),
+        async () => {
+          await refreshProject();
+          setMomentsProgress(null);
+        }
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to find moments';
+      setError(message);
+      setMomentsProgress(null);
+    }
+  }, [projectId, project?.transcription, connectWebSocket, refreshProject]);
+
+  // Handle render moment
+  const handleRenderMoment = useCallback(async () => {
+    if (!projectId || !selectedMoment || !project?.video_path) return;
+
+    setRenderProgress({ stage: 'starting', progress: 0, message: 'Starting render...' });
+
+    try {
+      const response = await fetch(`${API_BASE}/render`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          video_path: project.video_path,
+          start_time: selectedMoment.start,
+          end_time: selectedMoment.end,
+          template: cropTemplate,
+          crop_coordinates: cropCoordinates,
+          subtitle_config: textStyle.subtitlesEnabled ? {
+            enabled: true,
+            font_family: textStyle.fontFamily,
+            font_size: textStyle.fontSize,
+            text_color: textStyle.textColor,
+            position: textStyle.position,
+          } : { enabled: false },
+          moment_id: selectedMoment.id,
+          project_id: projectId,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to start render: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const jobId = data.job_id;
+
+      connectWebSocket(jobId,
+        (progress) => setRenderProgress(progress),
+        async () => {
+          await refreshProject();
+          setRenderProgress(null);
+        }
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to render';
+      setError(message);
+      setRenderProgress(null);
+    }
+  }, [projectId, selectedMoment, project?.video_path, cropTemplate, cropCoordinates, textStyle, connectWebSocket, refreshProject]);
+
+  // Handle moment selection
+  const handleMomentClick = useCallback((marker: TimelineMarker) => {
+    setSelectedMomentId(marker.id);
+    // Seek video to moment start
+    if (videoRef.current) {
+      videoRef.current.currentTime = marker.startTime;
+    }
+    setCurrentTime(marker.startTime);
+    setSelectedRange({ start: marker.startTime, end: marker.endTime });
+  }, []);
+
+  // Handle moment delete
+  const handleMomentDelete = useCallback(async (momentId: string) => {
+    if (!projectId || !project?.moments) return;
+
+    const updatedMoments = project.moments.filter(m => m.id !== momentId);
+
+    try {
+      await fetch(`${API_BASE}/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moments: updatedMoments }),
+      });
+
+      await refreshProject();
+      if (selectedMomentId === momentId) {
+        setSelectedMomentId(null);
+      }
+    } catch (e) {
+      console.error('Failed to delete moment:', e);
+    }
+  }, [projectId, project?.moments, selectedMomentId, refreshProject]);
+
+  // Handle crop change - save to moment
+  const handleCropChange = useCallback(async (coords: NormalizedCropCoordinates[]) => {
+    setCropCoordinates(coords);
+
+    if (!projectId || !selectedMomentId) return;
+
+    // Save to backend
+    try {
+      await fetch(`${API_BASE}/projects/${projectId}/moments/${selectedMomentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          crop_template: cropTemplate,
+          crop_coordinates: coords,
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to save crop:', e);
+    }
+  }, [projectId, selectedMomentId, cropTemplate]);
+
+  // Handle template change
+  const handleTemplateChange = useCallback(async (template: TemplateType) => {
+    setCropTemplate(template);
+
+    if (!projectId || !selectedMomentId) return;
+
+    try {
+      await fetch(`${API_BASE}/projects/${projectId}/moments/${selectedMomentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ crop_template: template }),
+      });
+    } catch (e) {
+      console.error('Failed to save template:', e);
+    }
+  }, [projectId, selectedMomentId]);
+
+  // Handle subtitle style change
+  const handleStyleChange = useCallback(async (style: TextStyle) => {
+    setTextStyle(style);
+
+    if (!projectId || !selectedMomentId) return;
+
+    try {
+      await fetch(`${API_BASE}/projects/${projectId}/moments/${selectedMomentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subtitle_config: {
+            enabled: style.subtitlesEnabled,
+            font_family: style.fontFamily,
+            font_size: style.fontSize,
+            text_color: style.textColor,
+            position: style.position,
+          },
+        }),
+      });
+    } catch (e) {
+      console.error('Failed to save subtitle config:', e);
+    }
+  }, [projectId, selectedMomentId]);
+
+  // Video URL helper
   const getVideoUrl = (videoPath: string): string => {
-    // Encode the path for URL safety
     const encodedPath = encodeURIComponent(videoPath);
     return `${API_BASE}/video-stream?path=${encodedPath}`;
   };
+
+  // Progress bar component
+  const ProgressBar = ({ progress, stage, message }: JobProgress) => (
+    <div className="bg-gray-700 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm text-gray-300 capitalize">{stage}</span>
+        <span className="text-sm text-blue-400">{Math.round(progress)}%</span>
+      </div>
+      <div className="w-full h-2 bg-gray-600 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-blue-500 transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <p className="text-xs text-gray-400 mt-2">{message}</p>
+    </div>
+  );
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <svg
-            className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
+          <svg className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
           <p className="text-gray-400">Loading project...</p>
         </div>
@@ -149,26 +536,12 @@ const ProjectEditor = () => {
     return (
       <div className="max-w-2xl mx-auto">
         <div className="bg-red-900/30 border border-red-700 rounded-lg p-6 text-center">
-          <svg
-            className="w-12 h-12 text-red-400 mx-auto mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
+          <svg className="w-12 h-12 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <h2 className="text-xl font-semibold text-white mb-2">Error</h2>
           <p className="text-gray-400 mb-4">{error}</p>
-          <button
-            onClick={handleBack}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-          >
+          <button onClick={handleBack} className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
             Back to Projects
           </button>
         </div>
@@ -181,219 +554,241 @@ const ProjectEditor = () => {
   }
 
   return (
-    <div className="max-w-6xl">
+    <div className="max-w-full px-4">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
+      <div className="flex items-center gap-4 mb-6">
         <button
           onClick={handleBack}
           className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
           aria-label="Back to projects"
         >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M10 19l-7-7m0 0l7-7m-7 7h18"
-            />
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold text-white">{project.name}</h1>
           <p className="text-gray-400 text-sm">
-            Created {new Date(project.created_at).toLocaleDateString()}
+            Stage: <span className="text-blue-400 capitalize">{currentStage.replace('-', ' ')}</span>
           </p>
         </div>
       </div>
 
-      {/* Project details */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main content area */}
-        <div className="lg:col-span-2 bg-gray-800 rounded-lg border border-gray-700 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">
-              Video Source
-            </h2>
-            {project.video_path && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowVideoPicker(true)}
-                  disabled={saving}
-                  className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-                >
-                  Change
-                </button>
-                <button
-                  onClick={handleClearVideo}
-                  disabled={saving}
-                  className="px-3 py-1.5 text-sm bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors"
-                >
-                  Remove
-                </button>
-              </div>
-            )}
-          </div>
-
-          {showVideoPicker ? (
-            <VideoFilePicker
-              selectedPath={project.video_path}
-              onSelect={handleVideoSelect}
-              onCancel={() => setShowVideoPicker(false)}
-            />
-          ) : project.video_path ? (
-            <div>
-              {/* Video Player */}
-              <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-3">
-                <VideoPlayer
-                  url={getVideoUrl(project.video_path)}
-                  className="w-full h-full"
-                />
-              </div>
-              {/* Video path info */}
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <svg
-                  className="w-4 h-4 flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
-                  />
-                </svg>
-                <span className="truncate" title={project.video_path}>
-                  {project.video_path.split('/').pop()}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
-              <div className="text-center text-gray-500">
-                <svg
-                  className="w-16 h-16 mx-auto mb-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
-                  />
-                </svg>
-                <p className="mb-4">No video attached</p>
-                <button
-                  onClick={() => setShowVideoPicker(true)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
-                >
-                  Select Video
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Project info */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Details</h3>
-
-            {project.description && (
-              <div className="mb-4">
-                <label className="text-sm text-gray-500">Description</label>
-                <p className="text-gray-300">{project.description}</p>
-              </div>
-            )}
-
-            <div className="mb-4">
-              <label className="text-sm text-gray-500">Last Updated</label>
-              <p className="text-gray-300">
-                {new Date(project.updated_at).toLocaleString()}
-              </p>
-            </div>
-
-            {project.tags.length > 0 && (
+      {/* Main layout */}
+      <div className="flex gap-6">
+        {/* Left side: Video and controls */}
+        <div className="flex-1 min-w-0">
+          {/* Video display or picker */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
+            {showVideoPicker ? (
+              <VideoFilePicker
+                selectedPath={project.video_path}
+                onSelect={handleVideoSelect}
+                onCancel={() => setShowVideoPicker(false)}
+              />
+            ) : project.video_path ? (
               <div>
-                <label className="text-sm text-gray-500">Tags</label>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {project.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="px-2 py-0.5 bg-gray-700 text-gray-300 text-xs rounded-full"
+                {/* Video Player - Native element for timeline integration */}
+                <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-4 relative">
+                  <video
+                    ref={videoRef}
+                    src={getVideoUrl(project.video_path)}
+                    className="w-full h-full"
+                    controls
+                    onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                    onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                  />
+                </div>
+
+                {/* Timeline with markers */}
+                {timelineMarkers.length > 0 && (
+                  <div className="mb-4">
+                    <VideoTimeline
+                      duration={videoDuration}
+                      currentTime={currentTime}
+                      markers={timelineMarkers}
+                      selectedRange={selectedRange}
+                      onSeek={(time) => {
+                        if (videoRef.current) videoRef.current.currentTime = time;
+                        setCurrentTime(time);
+                      }}
+                      onMarkerClick={handleMomentClick}
+                      onRangeSelect={setSelectedRange}
+                    />
+                  </div>
+                )}
+
+                {/* Video info and controls */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                    </svg>
+                    <span className="truncate">{project.video_path.split('/').pop()}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowVideoPicker(true)}
+                      disabled={saving}
+                      className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
                     >
-                      {tag}
-                    </span>
-                  ))}
+                      Change
+                    </button>
+                    <button
+                      onClick={handleClearVideo}
+                      disabled={saving}
+                      className="px-3 py-1.5 text-sm bg-red-600/80 hover:bg-red-600 text-white rounded-lg"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
+                <div className="text-center text-gray-500">
+                  <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                  </svg>
+                  <p className="mb-4">No video attached</p>
+                  <button
+                    onClick={() => setShowVideoPicker(true)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
+                  >
+                    Select Video
+                  </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Actions */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Actions</h3>
-            <div className="space-y-3">
-              <button
-                onClick={() => setShowVideoPicker(true)}
-                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+          {/* Workflow buttons */}
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
+            <h3 className="text-lg font-semibold text-white mb-4">Workflow</h3>
+
+            {/* Step 1: Transcribe */}
+            {currentStage === 'transcribe' && (
+              <div>
+                {transcribeProgress ? (
+                  <ProgressBar {...transcribeProgress} />
+                ) : (
+                  <button
+                    onClick={handleTranscribe}
+                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    Transcribe Video
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Step 2: Find Moments */}
+            {currentStage === 'find-moments' && (
+              <div>
+                {momentsProgress ? (
+                  <ProgressBar {...momentsProgress} />
+                ) : (
+                  <button
+                    onClick={handleFindMoments}
+                    className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    Find AI Moments
+                  </button>
+                )}
+                <p className="text-xs text-gray-500 mt-2">
+                  Transcription complete: {project.transcription?.segments.length || 0} segments
+                </p>
+              </div>
+            )}
+
+            {/* Step 3: Edit & Render */}
+            {currentStage === 'edit-moments' && selectedMoment && (
+              <div className="space-y-4">
+                {/* Crop Editor */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-300 mb-2">Crop & Preview</h4>
+                  <PreviewLayoutWithCropper
+                    src={getVideoUrl(project.video_path!)}
+                    srcType="video"
+                    initialTemplate={cropTemplate}
+                    previewWidth={200}
+                    onTemplateChange={handleTemplateChange}
+                    onNormalizedCropChange={handleCropChange}
+                    textStyle={textStyle}
+                    subtitleText={selectedMoment.text?.slice(0, 50) || 'Sample subtitle'}
                   />
-                </svg>
-                {project.video_path ? 'Change Video' : 'Select Video'}
-              </button>
-              <button className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
-                Export
-              </button>
-            </div>
+                </div>
+
+                {/* Subtitle Settings */}
+                <TextStylingPanel
+                  initialStyle={textStyle}
+                  onStyleChange={handleStyleChange}
+                />
+
+                {/* Render Button */}
+                {renderProgress ? (
+                  <ProgressBar {...renderProgress} />
+                ) : (
+                  <button
+                    onClick={handleRenderMoment}
+                    className="w-full px-4 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Render Clip
+                  </button>
+                )}
+
+                {selectedMoment.rendered_path && (
+                  <div className="bg-green-900/30 border border-green-700 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-green-400">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-sm">Rendered: {selectedMoment.rendered_path.split('/').pop()}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Show status when no moment selected */}
+            {currentStage === 'edit-moments' && !selectedMoment && (
+              <p className="text-gray-400 text-sm">
+                Select a moment from the sidebar to edit and render.
+              </p>
+            )}
           </div>
         </div>
+
+        {/* Right side: Moments Sidebar */}
+        {currentStage === 'edit-moments' && (
+          <div className="w-80 flex-shrink-0">
+            <MomentsSidebar
+              moments={timelineMarkers}
+              selectedMomentId={selectedMomentId}
+              onMomentClick={handleMomentClick}
+              onMomentDelete={handleMomentDelete}
+              className="h-[calc(100vh-200px)]"
+            />
+          </div>
+        )}
       </div>
 
       {/* Saving overlay */}
       {saving && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg p-6 flex items-center gap-4">
-            <svg
-              className="w-6 h-6 text-blue-500 animate-spin"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              />
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-              />
+            <svg className="w-6 h-6 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
             <span className="text-white">Saving...</span>
           </div>
