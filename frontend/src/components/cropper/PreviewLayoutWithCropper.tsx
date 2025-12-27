@@ -33,6 +33,8 @@ export interface PreviewLayoutWithCropperProps {
   textStyle?: TextStyle;
   /** Sample subtitle text to display */
   subtitleText?: string;
+  /** Compact mode - shows only preview without cropper and template selector */
+  compactMode?: boolean;
 }
 
 /**
@@ -69,7 +71,8 @@ const PreviewLayoutWithCropper = ({
   showFrameBorders = false,
   className = '',
   textStyle,
-  subtitleText
+  subtitleText,
+  compactMode = false
 }: PreviewLayoutWithCropperProps) => {
   const [template, setTemplate] = useState<TemplateType>(initialTemplate);
   const [normalizedCoordinates, setNormalizedCoordinates] = useState<NormalizedCropCoordinates[]>([]);
@@ -90,6 +93,27 @@ const PreviewLayoutWithCropper = ({
   const handleCropChange = useCallback((coords: CropCoordinates[]) => {
     onCropChange?.(coords);
   }, [onCropChange]);
+
+  // Compact mode: shows only the preview without cropper controls
+  if (compactMode) {
+    return (
+      <div
+        className={`preview-layout-compact ${className}`}
+        data-testid="preview-layout-compact"
+      >
+        <PreviewLayout
+          src={src}
+          srcType={srcType}
+          template={template}
+          normalizedCoordinates={normalizedCoordinates}
+          width={previewWidth}
+          showFrameBorders={showFrameBorders}
+          textStyle={textStyle}
+          subtitleText={subtitleText}
+        />
+      </div>
+    );
+  }
 
   return (
     <div

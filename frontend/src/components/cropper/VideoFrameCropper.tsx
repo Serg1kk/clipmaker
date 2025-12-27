@@ -9,6 +9,47 @@ import {
   generateDefaultCropAreas,
 } from './types';
 import { TemplateType } from '../TemplateSelector';
+import { TEMPLATE_CONFIGS } from '../../constants/templates';
+
+/**
+ * Convert aspect ratio number to human-readable badge string
+ */
+function getAspectRatioBadge(aspectRatio: number): string {
+  // Common aspect ratios with recognizable names
+  const ratioMap: Array<{ ratio: number; label: string }> = [
+    { ratio: 9 / 16, label: '9:16' },     // Vertical video
+    { ratio: 16 / 9, label: '16:9' },     // Standard widescreen
+    { ratio: 9 / 8, label: '9:8' },       // Two-frame split
+    { ratio: 1, label: '1:1' },           // Square
+    { ratio: 4 / 3, label: '4:3' },       // Classic TV
+    { ratio: 3 / 4, label: '3:4' },       // Portrait
+    { ratio: 3 / 2, label: '3:2' },       // DSLR
+    { ratio: 2 / 3, label: '2:3' },       // Portrait DSLR
+    { ratio: 21 / 9, label: '21:9' },     // Ultra-wide
+    { ratio: 1080 / 1440, label: '3:4' }, // 3-frame bottom
+  ];
+
+  // Find closest matching ratio (within 5% tolerance)
+  for (const { ratio, label } of ratioMap) {
+    if (Math.abs(aspectRatio - ratio) / ratio < 0.05) {
+      return label;
+    }
+  }
+
+  // Fallback: generate from decimal
+  // Try to find simple integer ratios
+  for (let denominator = 1; denominator <= 20; denominator++) {
+    const numerator = Math.round(aspectRatio * denominator);
+    if (Math.abs(numerator / denominator - aspectRatio) < 0.02) {
+      // Simplify if possible
+      const gcd = (a: number, b: number): number => b === 0 ? a : gcd(b, a % b);
+      const d = gcd(numerator, denominator);
+      return `${numerator / d}:${denominator / d}`;
+    }
+  }
+
+  return aspectRatio.toFixed(2);
+}
 
 /**
  * Generate initial coordinates based on template and container size
@@ -94,6 +135,19 @@ const VideoFrameCropper = ({
 
   // Get template configuration
   const templateConfig = useMemo(() => getTemplateConfig(template), [template]);
+
+  // Get aspect ratios for each frame from template config
+  const frameAspectRatios = useMemo(() => {
+    const config = TEMPLATE_CONFIGS[template];
+    return config.frames.map(frame => frame.aspectRatio);
+  }, [template]);
+
+  // Calculate source aspect ratio
+  const sourceAspectRatio = useMemo(() => {
+    return containerSize.width > 0 && containerSize.height > 0
+      ? containerSize.width / containerSize.height
+      : 16 / 9; // Default to 16:9
+  }, [containerSize.width, containerSize.height]);
 
   // Update container size on mount and resize
   useEffect(() => {
@@ -231,6 +285,9 @@ const VideoFrameCropper = ({
                 label={getLabel(index)}
                 color={getRectangleColor(index)}
                 disabled={disabled}
+                aspectRatio={frameAspectRatios[index]}
+                sourceAspectRatio={sourceAspectRatio}
+                aspectRatioBadge={getAspectRatioBadge(frameAspectRatios[index])}
               />
             ))}
           </div>

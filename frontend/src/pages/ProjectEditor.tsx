@@ -336,9 +336,47 @@ const ProjectEditor = () => {
       const data = await response.json();
       const jobId = data.job_id;
 
+      // Poll job status every 2 seconds for progress updates
+      let pollInterval: ReturnType<typeof setInterval> | null = null;
+      const startPolling = () => {
+        pollInterval = setInterval(async () => {
+          try {
+            const statusRes = await fetch(`${API_BASE}/transcribe/${jobId}`);
+            if (statusRes.ok) {
+              const status = await statusRes.json();
+              if (status.status === 'processing' || status.status === 'pending') {
+                // Determine stage based on progress
+                let stage = 'Transcribing';
+                if (status.progress < 25) stage = 'Extracting Audio';
+                else if (status.progress >= 85) stage = 'Processing';
+
+                setTranscribeProgress({
+                  stage,
+                  progress: status.progress || 0,
+                  message: status.progress < 25
+                    ? 'Extracting audio from video...'
+                    : status.progress >= 85
+                      ? 'Processing results...'
+                      : 'Transcribing audio...',
+                });
+              }
+            }
+          } catch (e) {
+            console.error('Poll error:', e);
+          }
+        }, 2000);
+      };
+      startPolling();
+
       connectWebSocket(jobId,
-        (progress) => setTranscribeProgress(progress),
+        (progress) => {
+          // WebSocket updates override polling
+          setTranscribeProgress(progress);
+        },
         async () => {
+          // Stop polling on completion
+          if (pollInterval) clearInterval(pollInterval);
+
           // Fetch transcription result and save to project
           try {
             const resultResponse = await fetch(`${API_BASE}/transcribe/${jobId}`);
@@ -739,7 +777,7 @@ const ProjectEditor = () => {
   return (
     <div className="max-w-full px-4">
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center gap-4 mb-4">
         <button
           onClick={handleBack}
           className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
@@ -757,231 +795,323 @@ const ProjectEditor = () => {
         </div>
       </div>
 
-      {/* Main layout */}
-      <div className="flex gap-6">
-        {/* Left side: Video and controls */}
-        <div className="flex-1 min-w-0">
-          {/* Video display or picker */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
-            {showVideoPicker ? (
-              <VideoFilePicker
-                selectedPath={project.video_path}
-                onSelect={handleVideoSelect}
-                onCancel={() => setShowVideoPicker(false)}
-              />
-            ) : project.video_path ? (
-              <div>
-                {/* Video Player - Native element for timeline integration */}
-                <div className="bg-gray-900 rounded-lg overflow-hidden mb-4 relative flex items-center justify-center" style={{ maxHeight: '50vh' }}>
+      {/* Main layout - changes based on whether moment is selected */}
+      {currentStage === 'edit-moments' && selectedMoment ? (
+        /* 50/50 Split Layout when moment is selected */
+        <div className="flex gap-4 h-[calc(100vh-120px)]">
+          {/* Left + Center: Video Player and Preview (combined area) */}
+          <div className="flex-1 flex flex-col min-w-0">
+            {/* Top row: 50/50 Video Player and Preview */}
+            <div className="flex gap-4 flex-1 min-h-0">
+              {/* Left: Video Player with crop overlay (50%) */}
+              <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col min-w-0">
+                <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Source Video
+                </h4>
+                <div className="flex-1 bg-gray-900 rounded-lg overflow-hidden relative flex items-center justify-center min-h-0">
                   <video
                     ref={videoRef}
-                    src={getVideoUrl(project.video_path)}
-                    className="max-w-full max-h-[50vh] object-contain"
+                    src={getVideoUrl(project.video_path!)}
+                    className="max-w-full max-h-full object-contain"
                     controls
                     onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                     onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
                   />
                 </div>
+              </div>
 
-                {/* Timeline with markers */}
-                {timelineMarkers.length > 0 && (
-                  <div className="mb-4">
-                    <VideoTimeline
-                      duration={videoDuration}
-                      currentTime={currentTime}
-                      markers={timelineMarkers}
-                      selectedRange={selectedRange}
-                      onSeek={(time) => {
-                        if (videoRef.current) videoRef.current.currentTime = time;
-                        setCurrentTime(time);
-                      }}
-                      onMarkerClick={handleMomentClick}
-                      onRangeSelect={setSelectedRange}
-                    />
-                  </div>
-                )}
-
-                {/* Video info */}
-                <div className="flex items-center gap-2 text-sm text-gray-500">
+              {/* Right: 9:16 Preview (50%) - sticky */}
+              <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col min-w-0">
+                <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
-                  <span className="truncate flex-1">{project.video_path.split('/').pop()}</span>
-                  <button
-                    onClick={() => setShowVideoPicker(true)}
-                    disabled={saving}
-                    className="text-gray-400 hover:text-white transition-colors"
-                    title="Change video"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-gray-900 rounded-lg flex items-center justify-center" style={{ height: '40vh', minHeight: '250px' }}>
-                <div className="text-center text-gray-500">
-                  <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-                  </svg>
-                  <p className="mb-4">No video attached</p>
-                  <button
-                    onClick={() => setShowVideoPicker(true)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
-                  >
-                    Select Video
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Workflow buttons */}
-          <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
-            <h3 className="text-lg font-semibold text-white mb-4">Workflow</h3>
-
-            {/* Step 1: Transcribe */}
-            {currentStage === 'transcribe' && (
-              <div>
-                {transcribeProgress ? (
-                  <ProgressBar {...transcribeProgress} />
-                ) : (
-                  <button
-                    onClick={handleTranscribe}
-                    className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    </svg>
-                    Transcribe Video
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Step 2: Find Moments */}
-            {currentStage === 'find-moments' && (
-              <div>
-                {momentsProgress ? (
-                  <ProgressBar {...momentsProgress} />
-                ) : (
-                  <button
-                    onClick={handleFindMoments}
-                    className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                    Find AI Moments
-                  </button>
-                )}
-                <p className="text-xs text-gray-500 mt-2">
-                  Transcription complete: {project.transcription?.segments.length || 0} segments
-                </p>
-              </div>
-            )}
-
-            {/* Step 3: Edit & Render */}
-            {currentStage === 'edit-moments' && selectedMoment && (
-              <div className="space-y-4">
-                {/* Crop Editor */}
-                <div>
-                  <h4 className="text-sm font-medium text-gray-300 mb-2">Crop & Preview</h4>
+                  9:16 Preview
+                </h4>
+                <div className="flex-1 flex items-center justify-center min-h-0">
                   <PreviewLayoutWithCropper
                     src={getVideoUrl(project.video_path!)}
                     srcType="video"
                     initialTemplate={cropTemplate}
-                    previewWidth={200}
+                    previewWidth={280}
                     onTemplateChange={handleTemplateChange}
                     onNormalizedCropChange={handleCropChange}
                     textStyle={textStyle}
                     subtitleText={selectedMoment.text?.slice(0, 50) || 'Sample subtitle'}
+                    compactMode={true}
                   />
                 </div>
+              </div>
+            </div>
 
-                {/* Subtitle Settings */}
-                <TextStylingPanel
-                  initialStyle={textStyle}
-                  onStyleChange={handleStyleChange}
+            {/* Timeline - below video area */}
+            {timelineMarkers.length > 0 && (
+              <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3">
+                <VideoTimeline
+                  duration={videoDuration}
+                  currentTime={currentTime}
+                  markers={timelineMarkers}
+                  selectedRange={selectedRange}
+                  onSeek={(time) => {
+                    if (videoRef.current) videoRef.current.currentTime = time;
+                    setCurrentTime(time);
+                  }}
+                  onMarkerClick={handleMomentClick}
+                  onRangeSelect={setSelectedRange}
                 />
-
-                {/* Render Button */}
-                {renderProgress ? (
-                  <ProgressBar {...renderProgress} />
-                ) : (
-                  <button
-                    onClick={handleRenderMoment}
-                    className="w-full px-4 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Render Clip
-                  </button>
-                )}
-
-                {selectedMoment.rendered_path && (
-                  <div className="bg-green-900/30 border border-green-700 rounded-lg p-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-green-400">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-sm">Rendered: {selectedMoment.rendered_path.split('/').pop()}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <a
-                          href={`${API_BASE}/video-stream?path=${encodeURIComponent(selectedMoment.rendered_path)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded flex items-center gap-1"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          View
-                        </a>
-                        <a
-                          href={`${API_BASE}/video-stream?path=${encodeURIComponent(selectedMoment.rendered_path)}&download=1`}
-                          download
-                          className="px-3 py-1 text-xs bg-green-600 hover:bg-green-500 text-white rounded flex items-center gap-1"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                          </svg>
-                          Download
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Show status when no moment selected */}
-            {currentStage === 'edit-moments' && !selectedMoment && (
-              <p className="text-gray-400 text-sm">
-                Select a moment from the sidebar to edit and render.
-              </p>
-            )}
-          </div>
-        </div>
+            {/* Settings row: Template selector and Text styling */}
+            <div className="mt-3 grid grid-cols-2 gap-4">
+              {/* Template Selector */}
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-3">
+                <h4 className="text-sm font-medium text-gray-300 mb-2">Crop Template</h4>
+                <div className="flex gap-2">
+                  {(['1-frame', '2-frame', '3-frame'] as TemplateType[]).map((template) => (
+                    <button
+                      key={template}
+                      onClick={() => handleTemplateChange(template)}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        cropTemplate === template
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      {template === '1-frame' ? '1' : template === '2-frame' ? '2' : '3'}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-        {/* Right side: Moments Sidebar */}
-        {currentStage === 'edit-moments' && (
-          <div className="w-80 flex-shrink-0">
+              {/* Text Styling - Compact */}
+              <div className="bg-gray-800 rounded-lg border border-gray-700 p-3">
+                <TextStylingPanel
+                  initialStyle={textStyle}
+                  onStyleChange={handleStyleChange}
+                  compact={true}
+                />
+              </div>
+            </div>
+
+            {/* Render Button and Status */}
+            <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3">
+              {renderProgress ? (
+                <ProgressBar {...renderProgress} />
+              ) : (
+                <button
+                  onClick={handleRenderMoment}
+                  className="w-full px-4 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  Render Clip
+                </button>
+              )}
+
+              {selectedMoment.rendered_path && (
+                <div className="mt-3 bg-green-900/30 border border-green-700 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-green-400">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-sm truncate">{selectedMoment.rendered_path.split('/').pop()}</span>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <a
+                        href={`${API_BASE}/video-stream?path=${encodeURIComponent(selectedMoment.rendered_path)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded flex items-center gap-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        View
+                      </a>
+                      <a
+                        href={`${API_BASE}/video-stream?path=${encodeURIComponent(selectedMoment.rendered_path)}&download=1`}
+                        download
+                        className="px-3 py-1 text-xs bg-green-600 hover:bg-green-500 text-white rounded flex items-center gap-1"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Download
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: Moments Sidebar - far right, scrollable */}
+          <div className="w-72 flex-shrink-0">
             <MomentsSidebar
               moments={timelineMarkers}
               selectedMomentId={selectedMomentId}
               onMomentClick={handleMomentClick}
               onMomentDelete={handleMomentDelete}
-              className="h-[calc(100vh-200px)]"
+              className="h-full"
             />
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        /* Original layout for non-edit stages or when no moment selected */
+        <div className="flex gap-6">
+          {/* Left side: Video and controls */}
+          <div className="flex-1 min-w-0">
+            {/* Video display or picker */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
+              {showVideoPicker ? (
+                <VideoFilePicker
+                  selectedPath={project.video_path}
+                  onSelect={handleVideoSelect}
+                  onCancel={() => setShowVideoPicker(false)}
+                />
+              ) : project.video_path ? (
+                <div>
+                  {/* Video Player - Native element for timeline integration */}
+                  <div className="bg-gray-900 rounded-lg overflow-hidden mb-4 relative flex items-center justify-center" style={{ maxHeight: '50vh' }}>
+                    <video
+                      ref={videoRef}
+                      src={getVideoUrl(project.video_path)}
+                      className="max-w-full max-h-[50vh] object-contain"
+                      controls
+                      onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                      onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                    />
+                  </div>
+
+                  {/* Timeline with markers */}
+                  {timelineMarkers.length > 0 && (
+                    <div className="mb-4">
+                      <VideoTimeline
+                        duration={videoDuration}
+                        currentTime={currentTime}
+                        markers={timelineMarkers}
+                        selectedRange={selectedRange}
+                        onSeek={(time) => {
+                          if (videoRef.current) videoRef.current.currentTime = time;
+                          setCurrentTime(time);
+                        }}
+                        onMarkerClick={handleMomentClick}
+                        onRangeSelect={setSelectedRange}
+                      />
+                    </div>
+                  )}
+
+                  {/* Video info */}
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                    </svg>
+                    <span className="truncate flex-1">{project.video_path.split('/').pop()}</span>
+                    <button
+                      onClick={() => setShowVideoPicker(true)}
+                      disabled={saving}
+                      className="text-gray-400 hover:text-white transition-colors"
+                      title="Change video"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-900 rounded-lg flex items-center justify-center" style={{ height: '40vh', minHeight: '250px' }}>
+                  <div className="text-center text-gray-500">
+                    <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                    </svg>
+                    <p className="mb-4">No video attached</p>
+                    <button
+                      onClick={() => setShowVideoPicker(true)}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
+                    >
+                      Select Video
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Workflow buttons */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
+              <h3 className="text-lg font-semibold text-white mb-4">Workflow</h3>
+
+              {/* Step 1: Transcribe */}
+              {currentStage === 'transcribe' && (
+                <div>
+                  {transcribeProgress ? (
+                    <ProgressBar {...transcribeProgress} />
+                  ) : (
+                    <button
+                      onClick={handleTranscribe}
+                      className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                      </svg>
+                      Transcribe Video
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Step 2: Find Moments */}
+              {currentStage === 'find-moments' && (
+                <div>
+                  {momentsProgress ? (
+                    <ProgressBar {...momentsProgress} />
+                  ) : (
+                    <button
+                      onClick={handleFindMoments}
+                      className="w-full px-4 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      Find AI Moments
+                    </button>
+                  )}
+                  <p className="text-xs text-gray-500 mt-2">
+                    Transcription complete: {project.transcription?.segments.length || 0} segments
+                  </p>
+                </div>
+              )}
+
+              {/* Show status when no moment selected in edit stage */}
+              {currentStage === 'edit-moments' && !selectedMoment && (
+                <p className="text-gray-400 text-sm">
+                  Select a moment from the sidebar to edit and render.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Right side: Moments Sidebar */}
+          {currentStage === 'edit-moments' && (
+            <div className="w-80 flex-shrink-0">
+              <MomentsSidebar
+                moments={timelineMarkers}
+                selectedMomentId={selectedMomentId}
+                onMomentClick={handleMomentClick}
+                onMomentDelete={handleMomentDelete}
+                className="h-[calc(100vh-200px)]"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Saving overlay */}
       {saving && (

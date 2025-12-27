@@ -63,6 +63,19 @@ export interface CropRectangleProps {
   color?: 'blue' | 'green' | 'purple';
   /** Whether the component is disabled */
   disabled?: boolean;
+  /**
+   * Aspect ratio to lock (width/height). When set, resize operations
+   * will maintain this exact ratio. Pass the source video aspect ratio
+   * in sourceAspectRatio to correctly calculate constrained dimensions.
+   */
+  aspectRatio?: number;
+  /**
+   * Source video aspect ratio (width/height). Required when aspectRatio
+   * is set to correctly calculate pixel dimensions.
+   */
+  sourceAspectRatio?: number;
+  /** Display aspect ratio badge (e.g., '9:16', '16:9') */
+  aspectRatioBadge?: string;
 }
 
 /**

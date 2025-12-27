@@ -60,6 +60,8 @@ export interface TextStylingPanelProps {
   className?: string;
   /** Disables all controls when true */
   disabled?: boolean;
+  /** Compact mode for inline layouts */
+  compact?: boolean;
 }
 
 /**
@@ -119,6 +121,7 @@ const TextStylingPanel = ({
   onStyleChange,
   className = '',
   disabled = false,
+  compact = false,
 }: TextStylingPanelProps) => {
   // Merge initial style with defaults
   const [style, setStyle] = useState<TextStyle>(() => ({
@@ -169,6 +172,106 @@ const TextStylingPanel = ({
     },
     [updateStyle]
   );
+
+  // Compact mode: streamlined inline layout
+  if (compact) {
+    return (
+      <div
+        className={`text-styling-panel-compact ${className}`}
+        role="group"
+        aria-label="Text styling controls"
+        data-testid="text-styling-panel-compact"
+      >
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Subtitles Toggle */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Subtitles</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={style.subtitlesEnabled}
+              onClick={() => updateStyle('subtitlesEnabled', !style.subtitlesEnabled)}
+              disabled={disabled}
+              className={`
+                relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer
+                rounded-full border-2 border-transparent
+                transition-colors duration-200 ease-in-out
+                ${style.subtitlesEnabled ? 'bg-blue-600' : 'bg-gray-600'}
+                ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+              `}
+            >
+              <span
+                aria-hidden="true"
+                className={`
+                  pointer-events-none inline-block h-4 w-4 transform rounded-full
+                  bg-white shadow ring-0 transition duration-200 ease-in-out
+                  ${style.subtitlesEnabled ? 'translate-x-4' : 'translate-x-0'}
+                `}
+              />
+            </button>
+          </div>
+
+          {/* Font Family */}
+          <select
+            value={style.fontFamily}
+            onChange={handleFontFamilyChange}
+            disabled={disabled}
+            className="px-2 py-1 text-xs bg-gray-700 border border-gray-600 rounded text-gray-200"
+            title="Font family"
+          >
+            {FONT_OPTIONS.slice(0, 6).map((font) => (
+              <option key={font.id} value={font.id}>{font.label}</option>
+            ))}
+          </select>
+
+          {/* Font Size */}
+          <div className="flex items-center gap-1">
+            <input
+              type="range"
+              min={FONT_SIZE_MIN}
+              max={FONT_SIZE_MAX}
+              value={style.fontSize}
+              onChange={handleFontSizeChange}
+              disabled={disabled}
+              className="w-16 h-1 rounded-lg appearance-none cursor-pointer bg-gray-600"
+              title="Font size"
+            />
+            <span className="text-xs text-gray-400 w-8">{style.fontSize}px</span>
+          </div>
+
+          {/* Color */}
+          <input
+            type="color"
+            value={style.textColor}
+            onChange={(e) => handleColorChange(e.target.value)}
+            disabled={disabled}
+            className="w-6 h-6 rounded cursor-pointer bg-transparent border border-gray-600"
+            title="Text color"
+          />
+
+          {/* Position */}
+          <div className="flex gap-1">
+            {(['top', 'center', 'bottom'] as TextPosition[]).map((pos) => (
+              <button
+                key={pos}
+                type="button"
+                onClick={() => handlePositionChange(pos)}
+                disabled={disabled}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  style.position === pos
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                title={`Position: ${pos}`}
+              >
+                {pos.charAt(0).toUpperCase()}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
