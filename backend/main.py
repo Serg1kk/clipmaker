@@ -56,6 +56,7 @@ from services.render_service import (
 )
 from models.transcription_moment import TranscriptionMoment
 from services.json_storage import JSONFileStorage, EntityNotFoundError
+from routers.projects import router as projects_router
 
 
 # Configuration
@@ -215,6 +216,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(projects_router)
 
 
 async def process_transcription(job_id: str) -> None:
