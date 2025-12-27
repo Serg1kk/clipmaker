@@ -63,6 +63,7 @@ from services.ffmpeg_service import (
 from services.karaoke_generator import (
     generate_karaoke_ass,
     generate_karaoke_ass_multiline,
+    generate_word_by_word_ass,
     KaraokeStyle,
     KaraokeConfig,
     ASSAlignment,
@@ -566,9 +567,9 @@ class RenderService:
             title=f"Clip Subtitles - {request.moment.id}",
         )
 
-        # Generate ASS content
+        # Generate ASS content (word-by-word, not karaoke)
         ass_path = temp_dir / "subtitles.ass"
-        generate_karaoke_ass(
+        generate_word_by_word_ass(
             adjusted_words,
             style=style,
             config=config,

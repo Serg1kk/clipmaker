@@ -728,6 +728,110 @@ def generate_karaoke_ass_multiline(
     return ass_content
 
 
+def generate_word_by_word_ass(
+    words: Sequence[WordTimestamp],
+    *,
+    style: Optional[KaraokeStyle] = None,
+    config: Optional[KaraokeConfig] = None,
+    output_path: Optional[Union[str, Path]] = None,
+    **kwargs,
+) -> str:
+    """
+    Generate ASS subtitles with one word at a time (word-by-word display).
+
+    Unlike karaoke mode which shows all words with highlight animation,
+    this mode shows each word individually during its time range,
+    similar to TikTok/Instagram Reels style.
+
+    Args:
+        words: Sequence of word timing objects
+        style: Style configuration
+        config: Generator configuration
+        output_path: Optional output file path
+        **kwargs: Additional style/config overrides
+
+    Returns:
+        str: Complete ASS file content
+    """
+    # Initialize defaults
+    if style is None:
+        style = KaraokeStyle()
+    if config is None:
+        config = KaraokeConfig()
+
+    # Apply kwargs overrides
+    for key, value in kwargs.items():
+        if hasattr(style, key):
+            setattr(style, key, value)
+        elif hasattr(config, key):
+            setattr(config, key, value)
+
+    # Convert to list
+    words_list = list(words)
+
+    if not words_list:
+        raise EmptyInputError("No words provided for subtitle generation")
+
+    # Build ASS file
+    output = io.StringIO()
+    line_ending = config.line_ending
+
+    if config.include_bom:
+        output.write("\ufeff")
+
+    # Script Info section
+    output.write(_generate_script_info(config))
+    output.write(line_ending)
+    output.write(line_ending)
+
+    # Styles section - use primary_color as the main text color (no karaoke animation)
+    output.write(_generate_styles_section(style, config.style_name, line_ending))
+    output.write(line_ending)
+    output.write(line_ending)
+
+    # Events section - one Dialogue per word
+    output.write("[Events]")
+    output.write(line_ending)
+    output.write("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text")
+    output.write(line_ending)
+
+    # Generate one dialogue line per word
+    for word in words_list:
+        word_text = _get_word_text(word)
+        start = _get_word_start(word)
+        end = _get_word_end(word)
+
+        # Skip empty words
+        if not word_text.strip():
+            continue
+
+        # Escape text
+        escaped_text = _escape_ass_text(word_text.strip())
+
+        # Generate dialogue for this word
+        dialogue = _generate_dialogue_line(
+            start_time=start,
+            end_time=end,
+            text=escaped_text,
+            style_name=config.style_name,
+            layer=config.layer,
+        )
+        output.write(dialogue)
+        output.write(line_ending)
+
+    # Get final content
+    ass_content = output.getvalue()
+
+    # Write to file if path provided
+    if output_path is not None:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(ass_content)
+
+    return ass_content
+
+
 # Convenience aliases
 Alignment = ASSAlignment
 Effect = KaraokeEffect
