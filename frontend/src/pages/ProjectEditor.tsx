@@ -28,6 +28,7 @@ import VideoTimeline from '../components/timeline/VideoTimeline';
 import MomentsSidebar from '../components/MomentsSidebar';
 import PreviewLayout from '../components/cropper/PreviewLayout';
 import CropOverlay from '../components/cropper/CropOverlay';
+import CropSettings from '../components/cropper/CropSettings';
 import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE, FontFamily, TextPosition } from '../components/TextStylingPanel';
 import { TimelineMarker, TimeRange, engagingMomentToMarker } from '../components/timeline/types';
 import type { VideoFileMetadata } from '../services/api';
@@ -98,6 +99,7 @@ const ProjectEditor = () => {
   const [textStyle, setTextStyle] = useState<TextStyle>(DEFAULT_TEXT_STYLE);
   const [cropTemplate, setCropTemplate] = useState<TemplateType>('1-frame');
   const [cropCoordinates, setCropCoordinates] = useState<NormalizedCropCoordinates[]>([]);
+  const [sourceVideoDimensions, setSourceVideoDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -831,7 +833,13 @@ const ProjectEditor = () => {
                   className="w-full h-full object-contain"
                   controls
                   onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                  onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                  onLoadedMetadata={(e) => {
+                    setVideoDuration(e.currentTarget.duration);
+                    setSourceVideoDimensions({
+                      width: e.currentTarget.videoWidth,
+                      height: e.currentTarget.videoHeight
+                    });
+                  }}
                 />
                 {/* CropOverlay positioned absolute over video */}
                 <CropOverlay
@@ -859,6 +867,16 @@ const ProjectEditor = () => {
                   onRangeSelect={setSelectedRange}
                 />
               </div>
+            )}
+
+            {/* Crop Settings Panel - shows raw and normalized coordinates */}
+            {cropCoordinates.length > 0 && (
+              <CropSettings
+                normalizedCoordinates={cropCoordinates}
+                videoDimensions={sourceVideoDimensions || undefined}
+                className="mt-3 flex-shrink-0"
+                defaultCollapsed={false}
+              />
             )}
           </div>
 
@@ -1027,7 +1045,13 @@ const ProjectEditor = () => {
                       className="max-w-full max-h-[50vh] object-contain"
                       controls
                       onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                      onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                      onLoadedMetadata={(e) => {
+                        setVideoDuration(e.currentTarget.duration);
+                        setSourceVideoDimensions({
+                          width: e.currentTarget.videoWidth,
+                          height: e.currentTarget.videoHeight
+                        });
+                      }}
                     />
                   </div>
 
