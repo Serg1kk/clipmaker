@@ -319,10 +319,13 @@ const ProjectEditor = () => {
     setTranscribeProgress({ stage: 'starting', progress: 0, message: 'Starting transcription...' });
 
     try {
+      // Backend expects form-data with file_path, not JSON
+      const formData = new FormData();
+      formData.append('file_path', project.video_path);
+
       const response = await fetch(`${API_BASE}/transcribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_path: project.video_path }),
+        body: formData,
       });
 
       if (!response.ok) {
@@ -768,11 +771,11 @@ const ProjectEditor = () => {
             ) : project.video_path ? (
               <div>
                 {/* Video Player - Native element for timeline integration */}
-                <div className="aspect-video bg-gray-900 rounded-lg overflow-hidden mb-4 relative">
+                <div className="bg-gray-900 rounded-lg overflow-hidden mb-4 relative flex items-center justify-center" style={{ maxHeight: '50vh' }}>
                   <video
                     ref={videoRef}
                     src={getVideoUrl(project.video_path)}
-                    className="w-full h-full"
+                    className="max-w-full max-h-[50vh] object-contain"
                     controls
                     onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                     onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
@@ -824,7 +827,7 @@ const ProjectEditor = () => {
                 </div>
               </div>
             ) : (
-              <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center">
+              <div className="bg-gray-900 rounded-lg flex items-center justify-center" style={{ height: '40vh', minHeight: '250px' }}>
                 <div className="text-center text-gray-500">
                   <svg className="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
