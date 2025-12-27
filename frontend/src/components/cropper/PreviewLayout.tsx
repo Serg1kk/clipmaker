@@ -1,8 +1,9 @@
-import { useMemo, useRef, useEffect, useCallback, useState, RefObject } from 'react';
+import { useMemo, RefObject } from 'react';
 import { TemplateType } from '../TemplateSelector';
 import { NormalizedCropCoordinates } from './types';
 import SubtitlePreviewOverlay from './SubtitlePreviewOverlay';
 import { TextStyle } from '../TextStylingPanel';
+import CroppedFrameCanvas from './CroppedFrameCanvas';
 
 /**
  * Layout configuration for each template in 9:16 preview
@@ -111,145 +112,6 @@ function calculateCropStyle(
 }
 
 /**
- * VideoFramePreview - A single video frame in the preview with cropping
- */
-interface VideoFramePreviewProps {
-  src: string;
-  coord: NormalizedCropCoordinates;
-  mainVideoRef?: RefObject<HTMLVideoElement>;
-  currentTime?: number;
-  index: number;
-}
-
-const VideoFramePreview = ({
-  src,
-  coord,
-  mainVideoRef,
-  currentTime,
-  index
-}: VideoFramePreviewProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const lastSyncTime = useRef<number>(0);
-  const syncThrottle = 100; // ms between syncs
-
-  // Sync time with main video
-  const syncWithMainVideo = useCallback(() => {
-    const video = videoRef.current;
-    const mainVideo = mainVideoRef?.current;
-
-    if (!video || !mainVideo) return;
-
-    // Don't sync too frequently
-    const now = Date.now();
-    if (now - lastSyncTime.current < syncThrottle) return;
-    lastSyncTime.current = now;
-
-    // Only sync if times differ significantly (more than 0.1s)
-    if (Math.abs(video.currentTime - mainVideo.currentTime) > 0.1) {
-      video.currentTime = mainVideo.currentTime;
-    }
-
-    // Sync play state
-    if (mainVideo.paused && !video.paused) {
-      video.pause();
-    } else if (!mainVideo.paused && video.paused) {
-      video.play().catch(() => {});
-    }
-  }, [mainVideoRef]);
-
-  // Sync with currentTime prop
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || currentTime === undefined) return;
-
-    if (Math.abs(video.currentTime - currentTime) > 0.1) {
-      video.currentTime = currentTime;
-    }
-  }, [currentTime]);
-
-  // Set up time sync with main video
-  useEffect(() => {
-    const mainVideo = mainVideoRef?.current;
-    if (!mainVideo) return;
-
-    const handleTimeUpdate = () => syncWithMainVideo();
-    const handleSeeked = () => syncWithMainVideo();
-    const handlePlay = () => {
-      const video = videoRef.current;
-      if (video) {
-        video.currentTime = mainVideo.currentTime;
-        video.play().catch(() => {});
-      }
-    };
-    const handlePause = () => {
-      const video = videoRef.current;
-      if (video) video.pause();
-    };
-
-    mainVideo.addEventListener('timeupdate', handleTimeUpdate);
-    mainVideo.addEventListener('seeked', handleSeeked);
-    mainVideo.addEventListener('play', handlePlay);
-    mainVideo.addEventListener('pause', handlePause);
-
-    // Initial sync
-    syncWithMainVideo();
-
-    return () => {
-      mainVideo.removeEventListener('timeupdate', handleTimeUpdate);
-      mainVideo.removeEventListener('seeked', handleSeeked);
-      mainVideo.removeEventListener('play', handlePlay);
-      mainVideo.removeEventListener('pause', handlePause);
-    };
-  }, [mainVideoRef, syncWithMainVideo]);
-
-  const handleLoadedData = useCallback(() => {
-    setIsLoaded(true);
-    // Sync time immediately after load
-    const mainVideo = mainVideoRef?.current;
-    const video = videoRef.current;
-    if (mainVideo && video) {
-      video.currentTime = mainVideo.currentTime;
-      if (!mainVideo.paused) {
-        video.play().catch(() => {});
-      }
-    } else if (currentTime !== undefined && video) {
-      video.currentTime = currentTime;
-    }
-  }, [mainVideoRef, currentTime]);
-
-  return (
-    <div
-      className="w-full h-full relative"
-      style={{ overflow: 'hidden' }}
-    >
-      <video
-        ref={videoRef}
-        src={src}
-        className="absolute"
-        style={{
-          width: `${100 / coord.width}%`,
-          height: `${100 / coord.height}%`,
-          left: `-${coord.x * (100 / coord.width)}%`,
-          top: `-${coord.y * (100 / coord.height)}%`,
-          objectFit: 'cover',
-        }}
-        onLoadedData={handleLoadedData}
-        muted
-        playsInline
-        loop
-        data-testid={`preview-video-${index}`}
-      />
-      {!isLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
-          <div className="animate-pulse text-gray-500 text-xs">Loading...</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
  * PreviewLayout - Shows final 9:16 preview with cropped areas positioned by template
  *
  * This component renders a vertical (9:16 aspect ratio) preview that shows
@@ -338,8 +200,8 @@ const PreviewLayout = ({
 
         // If we have coordinates, show the cropped region
         if (coord && coord.width > 0 && coord.height > 0) {
-          // For video sources, use VideoFramePreview component
-          if (isVideoSource) {
+          // For video sources, use CroppedFrameCanvas for real-time canvas rendering
+          if (isVideoSource && mainVideoRef) {
             return (
               <div
                 key={id}
@@ -347,12 +209,12 @@ const PreviewLayout = ({
                 style={frameStyle}
                 data-testid={`preview-frame-${index}`}
               >
-                <VideoFramePreview
-                  src={src}
-                  coord={coord}
-                  mainVideoRef={mainVideoRef}
-                  currentTime={currentTime}
-                  index={index}
+                <CroppedFrameCanvas
+                  videoRef={mainVideoRef}
+                  cropCoordinates={coord}
+                  frameWidth={Math.round(frameWidth)}
+                  frameHeight={Math.round(frameHeight)}
+                  frameIndex={index}
                 />
                 {/* Frame label for debugging */}
                 {showFrameBorders && (

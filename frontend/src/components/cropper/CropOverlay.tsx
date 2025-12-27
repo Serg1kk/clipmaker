@@ -13,7 +13,12 @@ import { TEMPLATE_CONFIGS } from '../../constants/templates';
 /**
  * Convert aspect ratio number to human-readable badge string
  */
-function getAspectRatioBadge(aspectRatio: number): string {
+function getAspectRatioBadge(aspectRatio: number | undefined): string {
+  // Guard against undefined or invalid aspect ratios
+  if (aspectRatio === undefined || aspectRatio === null || !isFinite(aspectRatio) || aspectRatio <= 0) {
+    return 'N/A';
+  }
+
   const ratioMap: Array<{ ratio: number; label: string }> = [
     { ratio: 9 / 16, label: '9:16' },
     { ratio: 16 / 9, label: '16:9' },

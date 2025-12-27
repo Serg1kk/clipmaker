@@ -29,6 +29,7 @@ import MomentsSidebar from '../components/MomentsSidebar';
 import PreviewLayout from '../components/cropper/PreviewLayout';
 import CropOverlay from '../components/cropper/CropOverlay';
 import CropSettings from '../components/cropper/CropSettings';
+import VideoPlayControls from '../components/cropper/VideoPlayControls';
 import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE, FontFamily, TextPosition } from '../components/TextStylingPanel';
 import { TimelineMarker, TimeRange, engagingMomentToMarker } from '../components/timeline/types';
 import type { VideoFileMetadata } from '../services/api';
@@ -851,12 +852,11 @@ const ProjectEditor = () => {
                 <span className="text-xs text-gray-500 ml-auto">Drag frames to adjust crop</span>
               </h4>
               <div className="flex-1 bg-gray-900 rounded-lg overflow-hidden relative min-h-0">
-                {/* Video Element */}
+                {/* Video Element - controls hidden when CropOverlay is active */}
                 <video
                   ref={videoRef}
                   src={getVideoUrl(project.video_path!)}
                   className="w-full h-full object-contain"
-                  controls
                   onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                   onLoadedMetadata={(e) => {
                     setVideoDuration(e.currentTarget.duration);
@@ -865,6 +865,12 @@ const ProjectEditor = () => {
                       height: e.currentTarget.videoHeight
                     });
                   }}
+                />
+                {/* Floating Play Controls - z-index above CropOverlay */}
+                <VideoPlayControls
+                  videoRef={videoRef as React.RefObject<HTMLVideoElement>}
+                  currentTime={currentTime}
+                  duration={videoDuration}
                 />
                 {/* CropOverlay positioned absolute over video */}
                 <CropOverlay
