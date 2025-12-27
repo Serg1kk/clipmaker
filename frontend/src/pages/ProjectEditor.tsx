@@ -30,14 +30,53 @@ import PreviewLayout from '../components/cropper/PreviewLayout';
 import CropOverlay from '../components/cropper/CropOverlay';
 import CropSettings from '../components/cropper/CropSettings';
 import VideoPlayControls from '../components/cropper/VideoPlayControls';
-import SubtitlePreviewOverlay from '../components/cropper/SubtitlePreviewOverlay';
-import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE, FontFamily, TextPosition } from '../components/TextStylingPanel';
+import SubtitleOverlay from '../components/subtitle/SubtitleOverlay';
+import type { SubtitleLine } from '../components/subtitle/types';
+import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE, FontFamily, TextPosition, FONT_OPTIONS } from '../components/TextStylingPanel';
 import { TimelineMarker, TimeRange, engagingMomentToMarker } from '../components/timeline/types';
 import type { VideoFileMetadata } from '../services/api';
 import type { NormalizedCropCoordinates } from '../components/cropper/types';
 import type { TemplateType } from '../components/TemplateSelector';
 
 const API_BASE = '';
+
+// LocalStorage cache key format: crop-cache-{projectId}-{template}
+interface CropCacheValue {
+  coordinates: NormalizedCropCoordinates[];
+  updatedAt: number;
+}
+
+// Save crop coordinates to localStorage cache per-project per-template
+function saveCropToCache(projectId: string, template: TemplateType, coordinates: NormalizedCropCoordinates[]): void {
+  if (!projectId || coordinates.length === 0) return;
+  const key = `crop-cache-${projectId}-${template}`;
+  const value: CropCacheValue = {
+    coordinates,
+    updatedAt: Date.now(),
+  };
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn('Failed to save crop to cache:', e);
+  }
+}
+
+// Load crop coordinates from localStorage cache per-project per-template
+function loadCropFromCache(projectId: string, template: TemplateType): NormalizedCropCoordinates[] | null {
+  if (!projectId) return null;
+  const key = `crop-cache-${projectId}-${template}`;
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) return null;
+    const parsed: CropCacheValue = JSON.parse(stored);
+    if (parsed.coordinates && Array.isArray(parsed.coordinates)) {
+      return parsed.coordinates;
+    }
+  } catch (e) {
+    console.warn('Failed to load crop from cache:', e);
+  }
+  return null;
+}
 
 // Workflow stages
 type WorkflowStage = 'select-video' | 'transcribe' | 'find-moments' | 'edit-moments' | 'render';
@@ -176,6 +215,39 @@ const ProjectEditor = () => {
     if (!selectedMomentId || !project?.moments) return null;
     return project.moments.find(m => m.id === selectedMomentId) || null;
   }, [selectedMomentId, project?.moments]);
+
+  // Extract subtitle lines from transcription for the selected moment's time range
+  const subtitleLines = useMemo((): SubtitleLine[] => {
+    if (!selectedMoment || !project?.transcription?.segments) return [];
+
+    const momentStart = selectedMoment.start;
+    const momentEnd = selectedMoment.end;
+    const lines: SubtitleLine[] = [];
+
+    // Iterate through segments and extract words within moment's time range
+    for (const segment of project.transcription.segments) {
+      if (!segment.words) continue;
+
+      for (const word of segment.words) {
+        // Check if word falls within moment's time range
+        if (word.end > momentStart && word.start < momentEnd) {
+          // Each word becomes its own subtitle line for word-by-word display
+          lines.push({
+            words: [{
+              text: word.word.trim(),
+              startTime: word.start,
+              endTime: word.end,
+            }],
+            startTime: word.start,
+            endTime: word.end,
+          });
+        }
+      }
+    }
+
+    // Sort by start time
+    return lines.sort((a, b) => a.startTime - b.startTime);
+  }, [selectedMoment, project?.transcription?.segments]);
 
   // Auto-pause when video reaches moment end time
   useEffect(() => {
@@ -627,14 +699,23 @@ const ProjectEditor = () => {
       // Load the moment's saved settings
       const moment = project?.moments?.find(m => m.id === marker.id);
       if (moment) {
-        // Restore crop settings
+        // Determine the template to use (moment's saved template or current)
+        const templateToUse = (moment.crop_template as TemplateType) || cropTemplate;
         if (moment.crop_template) {
-          setCropTemplate(moment.crop_template as TemplateType);
+          setCropTemplate(templateToUse);
         }
-        if (moment.crop_coordinates && Array.isArray(moment.crop_coordinates)) {
+
+        // Priority: moment's own coordinates > localStorage cache > keep current (don't reset)
+        if (moment.crop_coordinates && Array.isArray(moment.crop_coordinates) && moment.crop_coordinates.length > 0) {
+          // Moment has its own saved coordinates - use them
           setCropCoordinates(moment.crop_coordinates as NormalizedCropCoordinates[]);
-        } else {
-          setCropCoordinates([]);
+        } else if (projectId) {
+          // Try to load from localStorage cache for this template
+          const cachedCoords = loadCropFromCache(projectId, templateToUse);
+          if (cachedCoords) {
+            setCropCoordinates(cachedCoords);
+          }
+          // If no cache either, keep current coordinates (don't reset to empty)
         }
 
         // Restore subtitle settings
@@ -715,15 +796,20 @@ const ProjectEditor = () => {
 
   const debouncedSaveCrop = useDebouncedCallback(saveCropToBackend, 500);
 
-  // Handle crop change - save to moment with debouncing
+  // Handle crop change - save to moment with debouncing and cache to localStorage
   const handleCropChange = useCallback((coords: NormalizedCropCoordinates[]) => {
     setCropCoordinates(coords);
 
+    // Save to localStorage cache for this project+template
+    if (projectId) {
+      saveCropToCache(projectId, cropTemplate, coords);
+    }
+
     if (!selectedMomentId) return;
     debouncedSaveCrop(coords, cropTemplate, selectedMomentId);
-  }, [selectedMomentId, cropTemplate, debouncedSaveCrop]);
+  }, [selectedMomentId, cropTemplate, debouncedSaveCrop, projectId]);
 
-  // Handle template change
+  // Handle template change - load cached coordinates for the new template
   const handleTemplateChange = useCallback(async (template: TemplateType) => {
     try {
       // Validate template value
@@ -733,6 +819,16 @@ const ProjectEditor = () => {
       }
 
       setCropTemplate(template);
+
+      // Load cached coordinates for this template (if available)
+      if (projectId) {
+        const cachedCoords = loadCropFromCache(projectId, template);
+        if (cachedCoords) {
+          setCropCoordinates(cachedCoords);
+        }
+        // If no cache, coordinates will be regenerated by CropOverlay component
+        // based on the new template
+      }
 
       if (!projectId || !selectedMomentId) return;
 
@@ -870,7 +966,7 @@ const ProjectEditor = () => {
         /* New 50/25/25 Grid Layout when moment is selected */
         <div className="grid h-[calc(100vh-120px)] overflow-hidden" style={{ gridTemplateColumns: '50% 25% 25%' }}>
           {/* Left Column (50%): Source Video with CropOverlay + Timeline */}
-          <div className="flex flex-col min-h-0 pr-3">
+          <div className="flex flex-col min-h-0 pr-3 overflow-y-auto">
             {/* Source Video Container with CropOverlay - FIXED SIZE */}
             <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col flex-shrink-0">
               <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
@@ -919,15 +1015,20 @@ const ProjectEditor = () => {
                   videoRef={videoRef as React.RefObject<HTMLVideoElement>}
                   videoDimensions={sourceVideoDimensions || undefined}
                 />
-                {/* Subtitle Preview on Source Video */}
-                {textStyle.subtitlesEnabled && (
-                  <SubtitlePreviewOverlay
-                    enabled={textStyle.subtitlesEnabled}
-                    fontFamily={textStyle.fontFamily}
-                    fontSize={textStyle.fontSize}
-                    textColor={textStyle.textColor}
-                    position={textStyle.position}
-                    sampleText={(selectedMoment?.text ?? '').slice(0, 80) || 'Subtitle preview'}
+                {/* Subtitle Preview on Source Video - synced with real transcription words */}
+                {textStyle.subtitlesEnabled && subtitleLines.length > 0 && (
+                  <SubtitleOverlay
+                    lines={subtitleLines}
+                    currentTime={currentTime}
+                    style={{
+                      fontFamily: FONT_OPTIONS.find(f => f.id === textStyle.fontFamily)?.value || 'Arial, sans-serif',
+                      fontSize: Math.max(12, Math.round(textStyle.fontSize * 0.5)), // Scale for preview
+                      textColor: textStyle.textColor,
+                      highlightColor: textStyle.textColor, // Same color, word-by-word display
+                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                      position: textStyle.position,
+                    }}
+                    className="z-20"
                   />
                 )}
               </div>
@@ -951,17 +1052,7 @@ const ProjectEditor = () => {
               </div>
             )}
 
-            {/* Crop Settings Panel - shows raw and normalized coordinates */}
-            {cropCoordinates.length > 0 && (
-              <CropSettings
-                normalizedCoordinates={cropCoordinates}
-                videoDimensions={sourceVideoDimensions || undefined}
-                className="mt-3 flex-shrink-0"
-                defaultCollapsed={false}
-              />
-            )}
-
-            {/* Subtitle Settings Panel - next to Crop Settings */}
+            {/* Subtitle Settings Panel - higher priority, always visible */}
             <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3 flex-shrink-0">
               <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -975,6 +1066,16 @@ const ProjectEditor = () => {
                 compact={true}
               />
             </div>
+
+            {/* Crop Settings Panel - collapsible, shows raw and normalized coordinates */}
+            {cropCoordinates.length > 0 && (
+              <CropSettings
+                normalizedCoordinates={cropCoordinates}
+                videoDimensions={sourceVideoDimensions || undefined}
+                className="mt-3 flex-shrink-0"
+                defaultCollapsed={false}
+              />
+            )}
           </div>
 
           {/* Center Column (25%): Templates + Preview */}
