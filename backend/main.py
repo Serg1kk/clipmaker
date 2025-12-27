@@ -1523,17 +1523,35 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
         # =================================================================
         # Build subtitle config from moment_data (priority) or request
         # =================================================================
+        # Map frontend position values to backend enum values
+        POSITION_MAP = {
+            "top": "top_center",
+            "center": "middle_center",
+            "bottom": "bottom_center",
+        }
+
+        def normalize_subtitle_config(config: dict) -> dict:
+            """Normalize frontend subtitle config to backend format."""
+            if not config:
+                return config
+            result = config.copy()
+            if "position" in result:
+                result["position"] = POSITION_MAP.get(result["position"], result["position"])
+            return result
+
         subtitle_cfg = SubtitleConfig()
         if moment_data.subtitle_config:
             # Use moment-level subtitle config
             try:
-                subtitle_cfg = SubtitleConfig(**moment_data.subtitle_config)
+                normalized = normalize_subtitle_config(moment_data.subtitle_config)
+                subtitle_cfg = SubtitleConfig(**normalized)
                 logger.info("Using subtitle config from moment data")
             except Exception as e:
                 logger.warning(f"Invalid moment subtitle_config, using defaults: {e}")
         elif request.subtitle_config:
             # Fall back to request-level config
-            subtitle_cfg = SubtitleConfig(**request.subtitle_config)
+            normalized = normalize_subtitle_config(request.subtitle_config)
+            subtitle_cfg = SubtitleConfig(**normalized)
 
         # =================================================================
         # Scale font_size for output resolution
