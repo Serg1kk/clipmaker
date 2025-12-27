@@ -318,22 +318,27 @@ async def process_transcription(job_id: str) -> None:
         # Track transcription progress with simulated updates
         transcription_done = False
         current_simulated_progress = 25.0
+        main_loop = asyncio.get_event_loop()
 
-        # Whisper progress callback
+        # Whisper progress callback (called from thread, needs thread-safe update)
         def on_whisper_progress(progress: float, message: str) -> None:
             nonlocal current_simulated_progress
             # Map Whisper progress (0-100) to our progress (25-90)
             mapped_progress = 25.0 + (progress * 0.65)
             current_simulated_progress = mapped_progress
-            asyncio.create_task(tracker.update_progress(
-                stage=ProgressStage.TRANSCRIBING,
-                progress=mapped_progress,
-                message=message,
-                current_step=2,
-                eta_seconds=None,
-            ))
             job.progress = mapped_progress
             job.updated_at = datetime.utcnow()
+            # Schedule coroutine on main event loop from thread
+            asyncio.run_coroutine_threadsafe(
+                tracker.update_progress(
+                    stage=ProgressStage.TRANSCRIBING,
+                    progress=mapped_progress,
+                    message=message,
+                    current_step=2,
+                    eta_seconds=None,
+                ),
+                main_loop
+            )
 
         # Background task to simulate progress during long transcription
         async def simulate_progress():
