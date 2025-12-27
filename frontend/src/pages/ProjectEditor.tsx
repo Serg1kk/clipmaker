@@ -350,54 +350,115 @@ const ProjectEditor = () => {
     }
   }, [projectId, project?.transcription, connectWebSocket, refreshProject]);
 
-  // Handle render moment
+  // Handle render moment - connects to /ws/render/{job_id} for progress
   const handleRenderMoment = useCallback(async () => {
     if (!projectId || !selectedMoment || !project?.video_path) return;
 
     setRenderProgress({ stage: 'starting', progress: 0, message: 'Starting render...' });
 
     try {
+      // First save the current crop/subtitle settings to the moment
+      await fetch(`${API_BASE}/projects/${projectId}/moments/${selectedMoment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          crop_template: cropTemplate,
+          crop_coordinates: cropCoordinates,
+          subtitle_config: textStyle.subtitlesEnabled ? {
+            enabled: true,
+            font_name: textStyle.fontFamily,
+            font_size: textStyle.fontSize,
+            primary_color: textStyle.textColor,
+            position: textStyle.position,
+          } : { enabled: false },
+        }),
+      });
+
+      // Now call the render endpoint with project_id and moment_id only
       const response = await fetch(`${API_BASE}/render`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          video_path: project.video_path,
-          start_time: selectedMoment.start,
-          end_time: selectedMoment.end,
-          template: cropTemplate,
-          crop_coordinates: cropCoordinates,
-          subtitle_config: textStyle.subtitlesEnabled ? {
-            enabled: true,
-            font_family: textStyle.fontFamily,
-            font_size: textStyle.fontSize,
-            text_color: textStyle.textColor,
-            position: textStyle.position,
-          } : { enabled: false },
-          moment_id: selectedMoment.id,
           project_id: projectId,
+          moment_id: selectedMoment.id,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to start render: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `Failed to start render: ${response.statusText}`);
       }
 
       const data = await response.json();
       const jobId = data.job_id;
 
-      connectWebSocket(jobId,
-        (progress) => setRenderProgress(progress),
-        async () => {
-          await refreshProject();
-          setRenderProgress(null);
+      // Connect to the render-specific WebSocket endpoint
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsHost = window.location.host;
+      const ws = new WebSocket(`${wsProtocol}//${wsHost}/ws/render/${jobId}`);
+
+      ws.onmessage = (event) => {
+        try {
+          const msgData = JSON.parse(event.data);
+
+          if (msgData.type === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }));
+            return;
+          }
+
+          // Handle initial status
+          if (msgData.type === 'initial_render_status' || msgData.type === 'render_progress') {
+            setRenderProgress({
+              stage: msgData.current_phase || msgData.stage || 'processing',
+              progress: msgData.progress || 0,
+              message: msgData.message || '',
+            });
+          }
+
+          // Handle completion
+          if (msgData.type === 'render_complete' || msgData.status === 'completed') {
+            setRenderProgress({
+              stage: 'completed',
+              progress: 100,
+              message: `Render complete: ${msgData.output_path || 'clip ready'}`,
+            });
+            refreshProject();
+            ws.close();
+            // Clear progress after showing completion briefly
+            setTimeout(() => setRenderProgress(null), 3000);
+          }
+
+          // Handle failure
+          if (msgData.type === 'render_failed' || msgData.status === 'failed') {
+            setError(msgData.error || msgData.message || 'Render failed');
+            setRenderProgress(null);
+            ws.close();
+          }
+        } catch (e) {
+          console.error('WebSocket message error:', e);
         }
-      );
+      };
+
+      ws.onerror = (e) => {
+        console.error('WebSocket error:', e);
+        setError('Connection error during render');
+        setRenderProgress(null);
+      };
+
+      ws.onclose = () => {
+        // Only clear progress if not already completed
+        if (renderProgress?.stage !== 'completed') {
+          refreshProject();
+        }
+      };
+
+      wsRef.current = ws;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to render';
       setError(message);
       setRenderProgress(null);
     }
-  }, [projectId, selectedMoment, project?.video_path, cropTemplate, cropCoordinates, textStyle, connectWebSocket, refreshProject]);
+  }, [projectId, selectedMoment, project?.video_path, cropTemplate, cropCoordinates, textStyle, refreshProject, renderProgress?.stage]);
 
   // Handle moment selection
   const handleMomentClick = useCallback((marker: TimelineMarker) => {
@@ -748,11 +809,37 @@ const ProjectEditor = () => {
 
                 {selectedMoment.rendered_path && (
                   <div className="bg-green-900/30 border border-green-700 rounded-lg p-3">
-                    <div className="flex items-center gap-2 text-green-400">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="text-sm">Rendered: {selectedMoment.rendered_path.split('/').pop()}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-green-400">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-sm">Rendered: {selectedMoment.rendered_path.split('/').pop()}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <a
+                          href={`${API_BASE}/video-stream?path=${encodeURIComponent(selectedMoment.rendered_path)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded flex items-center gap-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          View
+                        </a>
+                        <a
+                          href={`${API_BASE}/video-stream?path=${encodeURIComponent(selectedMoment.rendered_path)}&download=1`}
+                          download
+                          className="px-3 py-1 text-xs bg-green-600 hover:bg-green-500 text-white rounded flex items-center gap-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Download
+                        </a>
+                      </div>
                     </div>
                   </div>
                 )}

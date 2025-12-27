@@ -924,6 +924,10 @@ async def stream_video(
         ...,
         description="Full path to the video file",
     ),
+    download: bool = Query(
+        False,
+        description="If true, serve as attachment for download instead of inline",
+    ),
 ):
     """
     Stream a video file for playback with HTTP Range support.
@@ -1000,11 +1004,12 @@ async def stream_video(
                     remaining -= len(chunk)
                     yield chunk
 
+        disposition = "attachment" if download else "inline"
         headers = {
             "Content-Range": f"bytes {start}-{end}/{file_size}",
             "Accept-Ranges": "bytes",
             "Content-Length": str(content_length),
-            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}",
         }
 
         return StreamingResponse(
@@ -1021,10 +1026,11 @@ async def stream_video(
             while chunk := await f.read(chunk_size):
                 yield chunk
 
+    disposition = "attachment" if download else "inline"
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Length": str(file_size),
-        "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
+        "Content-Disposition": f"{disposition}; filename*=UTF-8''{encoded_filename}",
     }
 
     return StreamingResponse(
