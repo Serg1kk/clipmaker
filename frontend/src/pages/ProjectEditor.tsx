@@ -115,6 +115,31 @@ function loadSubtitleFromCache(projectId: string): TextStyle | null {
   return null;
 }
 
+// LocalStorage cache for selected template per-project
+function saveTemplateToCache(projectId: string, template: TemplateType): void {
+  if (!projectId) return;
+  const key = `template-cache-${projectId}`;
+  try {
+    localStorage.setItem(key, template);
+  } catch (e) {
+    console.warn('Failed to save template to cache:', e);
+  }
+}
+
+function loadTemplateFromCache(projectId: string): TemplateType | null {
+  if (!projectId) return null;
+  const key = `template-cache-${projectId}`;
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored && ['1-frame', '2-frame', '3-frame'].includes(stored)) {
+      return stored as TemplateType;
+    }
+  } catch (e) {
+    console.warn('Failed to load template from cache:', e);
+  }
+  return null;
+}
+
 // Workflow stages
 type WorkflowStage = 'select-video' | 'transcribe' | 'find-moments' | 'edit-moments' | 'render';
 
@@ -248,6 +273,15 @@ const ProjectEditor = () => {
       setTextStyle(cachedStyle);
     }
   }, [projectId, selectedMomentId]);
+
+  // Load template from localStorage on initial project load
+  useEffect(() => {
+    if (!projectId) return;
+    const cachedTemplate = loadTemplateFromCache(projectId);
+    if (cachedTemplate) {
+      setCropTemplate(cachedTemplate);
+    }
+  }, [projectId]);
 
   // Convert project moments to timeline markers
   const timelineMarkers = useMemo((): TimelineMarker[] => {
@@ -677,8 +711,8 @@ const ProjectEditor = () => {
             });
           }
 
-          // Handle completion
-          if (msgData.type === 'render_complete' || msgData.status === 'completed') {
+          // Handle completion - check stage (from render_progress), status and current_phase (from initial_render_status)
+          if (msgData.stage === 'completed' || msgData.status === 'completed' || msgData.current_phase === 'completed') {
             setRenderProgress({
               stage: 'completed',
               progress: 100,
@@ -688,13 +722,15 @@ const ProjectEditor = () => {
             ws.close();
             // Clear progress after showing completion briefly
             setTimeout(() => setRenderProgress(null), 3000);
+            return;
           }
 
-          // Handle failure
-          if (msgData.type === 'render_failed' || msgData.status === 'failed') {
+          // Handle failure - check stage (from render_progress), status and current_phase (from initial_render_status)
+          if (msgData.stage === 'failed' || msgData.status === 'failed' || msgData.current_phase === 'failed') {
             setError(msgData.error || msgData.message || 'Render failed');
             setRenderProgress(null);
             ws.close();
+            return;
           }
         } catch (e) {
           console.error('WebSocket message error:', e);
@@ -751,18 +787,23 @@ const ProjectEditor = () => {
       // Load the moment's saved settings
       const moment = project?.moments?.find(m => m.id === marker.id);
       if (moment) {
-        // Determine the template to use (moment's saved template or current)
-        const templateToUse = (moment.crop_template as TemplateType) || cropTemplate;
+        // Keep current template if moment has no saved template (don't reset!)
+        // Only override template if moment explicitly has one saved
+        const templateToUse = moment.crop_template
+          ? (moment.crop_template as TemplateType)
+          : cropTemplate; // Keep current user-selected template
+
         if (moment.crop_template) {
-          setCropTemplate(templateToUse);
+          setCropTemplate(moment.crop_template as TemplateType);
         }
+        // Note: if moment has no crop_template, we keep the current cropTemplate (no setCropTemplate call)
 
         // Priority: moment's own coordinates > localStorage cache > keep current (don't reset)
         if (moment.crop_coordinates && Array.isArray(moment.crop_coordinates) && moment.crop_coordinates.length > 0) {
           // Moment has its own saved coordinates - use them
           setCropCoordinates(moment.crop_coordinates as NormalizedCropCoordinates[]);
         } else if (projectId) {
-          // Try to load from localStorage cache for this template
+          // Try to load from localStorage cache for this template (current template, not moment's)
           const cachedCoords = loadCropFromCache(projectId, templateToUse);
           if (cachedCoords) {
             setCropCoordinates(cachedCoords);
@@ -876,6 +917,11 @@ const ProjectEditor = () => {
       }
 
       setCropTemplate(template);
+
+      // Save template to localStorage cache for project-wide persistence
+      if (projectId) {
+        saveTemplateToCache(projectId, template);
+      }
 
       // Load cached coordinates for this template (if available)
       if (projectId) {
