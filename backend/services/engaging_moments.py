@@ -84,14 +84,14 @@ Your task is to analyze the provided transcript and identify moments that would 
 For each engaging moment you identify, provide:
 - start: The start time in seconds (use the exact timestamps from the transcript)
 - end: The end time in seconds (ensure the phrase is complete)
-- reason: A brief explanation of why this moment is engaging (what makes it hook-worthy)
+- reason: A SHORT (1-2 sentences) explanation of why this moment is engaging
 
-IMPORTANT RULES:
+CRITICAL RULES:
+- WRITE THE "reason" FIELD IN THE SAME LANGUAGE AS THE TRANSCRIPT (if Russian, write in Russian; if English, write in English, etc.)
 - Always use the EXACT timestamps provided in the transcript segments
 - Ensure each moment contains COMPLETE sentences/thoughts
 - Prefer moments that start at natural sentence boundaries
-- The text between start and end should form a coherent, complete statement
-- Prioritize quality over quantity - only flag truly engaging moments
+- Keep reasons SHORT to avoid response truncation
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -99,7 +99,7 @@ Respond ONLY with valid JSON in this exact format:
     {
       "start": 12.5,
       "end": 45.2,
-      "reason": "Compelling story hook that creates curiosity"
+      "reason": "Short reason in transcript language"
     }
   ]
 }
@@ -197,16 +197,16 @@ def _get_transcript_duration(transcript_json: dict[str, Any]) -> float:
 
 def _extract_json_from_response(response_text: str) -> str:
     """
-    Extract JSON from Gemini response, handling various formats.
+    Extract JSON from Gemini response, handling various formats including truncated responses.
 
     Gemini often wraps JSON in markdown code blocks or adds explanatory text.
-    This function extracts the actual JSON object.
+    This function extracts the actual JSON object, handling truncation gracefully.
 
     Args:
         response_text: Raw response from Gemini
 
     Returns:
-        Extracted JSON string
+        Extracted JSON string (possibly repaired if truncated)
     """
     text = response_text.strip()
 
@@ -217,12 +217,12 @@ def _extract_json_from_response(response_text: str) -> str:
         return match.group(1)
 
     # Try 2: Find JSON object anywhere in the text using brace matching
-    # Find first { and match to last }
     start_idx = text.find('{')
     if start_idx != -1:
         # Find matching closing brace
         brace_count = 0
         end_idx = start_idx
+        found_match = False
         for i, char in enumerate(text[start_idx:], start=start_idx):
             if char == '{':
                 brace_count += 1
@@ -230,10 +230,16 @@ def _extract_json_from_response(response_text: str) -> str:
                 brace_count -= 1
                 if brace_count == 0:
                     end_idx = i
+                    found_match = True
                     break
 
-        if end_idx > start_idx:
+        if found_match and end_idx > start_idx:
             return text[start_idx:end_idx + 1]
+
+        # JSON is truncated - try to repair it
+        # Find the last complete object in the array
+        json_text = text[start_idx:]
+        return _repair_truncated_json(json_text)
 
     # Try 3: Return cleaned text as-is (original behavior)
     if text.startswith("```json"):
@@ -244,6 +250,78 @@ def _extract_json_from_response(response_text: str) -> str:
         text = text[:-3]
 
     return text.strip()
+
+
+def _repair_truncated_json(json_text: str) -> str:
+    """
+    Attempt to repair truncated JSON by closing unclosed brackets.
+
+    This handles cases where the LLM response was cut off mid-JSON.
+
+    Args:
+        json_text: Potentially truncated JSON string
+
+    Returns:
+        Repaired JSON string
+    """
+    # Find the last complete object in moments array
+    # Look for pattern: }, followed by potential start of new object or end
+    last_complete_idx = -1
+
+    # Find positions of all "}," which indicate end of complete array items
+    brace_count = 0
+    in_string = False
+    escape_next = False
+
+    for i, char in enumerate(json_text):
+        if escape_next:
+            escape_next = False
+            continue
+
+        if char == '\\':
+            escape_next = True
+            continue
+
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+
+        if in_string:
+            continue
+
+        if char == '{':
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            # Check if this closes an array item (next non-whitespace is comma or ])
+            rest = json_text[i+1:].lstrip()
+            if rest.startswith(',') or rest.startswith(']'):
+                last_complete_idx = i
+
+    if last_complete_idx > 0:
+        # Truncate to last complete item
+        repaired = json_text[:last_complete_idx + 1]
+
+        # Count remaining open braces/brackets
+        open_braces = repaired.count('{') - repaired.count('}')
+        open_brackets = repaired.count('[') - repaired.count(']')
+
+        # Close the array and object
+        if open_brackets > 0:
+            repaired += '\n  ]'
+            open_brackets -= 1
+        if open_braces > 0:
+            repaired += '\n}'
+            open_braces -= 1
+
+        # Close any remaining
+        repaired += ']' * open_brackets + '}' * open_braces
+
+        logger.warning(f"Repaired truncated JSON response (cut at char {last_complete_idx})")
+        return repaired
+
+    # Couldn't repair - return as-is and let json.loads fail with better error
+    return json_text
 
 
 def _parse_gemini_response(
@@ -311,9 +389,10 @@ def find_engaging_moments(
     *,
     client: Optional[OpenRouterClient] = None,
     temperature: float = 0.3,
-    max_tokens: int = 4096,
+    max_tokens: int = 8192,
     min_duration: float = 13.0,
     max_duration: float = 60.0,
+    max_moments: int = 7,
 ) -> list[EngagingMoment]:
     """
     Analyze a transcript and find engaging moments (hooks) using Gemini 2.5 Pro.
@@ -371,16 +450,17 @@ def find_engaging_moments(
         return []
 
     # Build the user prompt
-    user_prompt = f"""Analyze the following transcript and identify engaging moments (hooks) that are between {min_duration:.0f}-{max_duration:.0f} seconds long.
+    user_prompt = f"""Analyze the following transcript and identify the TOP {max_moments} most engaging moments (hooks) that are between {min_duration:.0f}-{max_duration:.0f} seconds long.
 
 TRANSCRIPT:
 {formatted_transcript}
 
 Remember:
+- Return MAXIMUM {max_moments} moments (the best ones only)
 - Each moment MUST be a complete phrase (never cut mid-sentence)
 - Duration must be between {min_duration:.0f}-{max_duration:.0f} seconds
 - Use the EXACT timestamps from the transcript
-- Only return truly engaging moments
+- Keep the "reason" field SHORT (1-2 sentences max)
 
 Respond with JSON only."""
 
@@ -423,9 +503,10 @@ async def find_engaging_moments_async(
     *,
     client: Optional[AsyncOpenRouterClient] = None,
     temperature: float = 0.3,
-    max_tokens: int = 4096,
+    max_tokens: int = 8192,
     min_duration: float = 13.0,
     max_duration: float = 60.0,
+    max_moments: int = 7,
 ) -> list[EngagingMoment]:
     """
     Async version of find_engaging_moments.
@@ -458,16 +539,17 @@ async def find_engaging_moments_async(
         return []
 
     # Build the user prompt
-    user_prompt = f"""Analyze the following transcript and identify engaging moments (hooks) that are between {min_duration:.0f}-{max_duration:.0f} seconds long.
+    user_prompt = f"""Analyze the following transcript and identify the TOP {max_moments} most engaging moments (hooks) that are between {min_duration:.0f}-{max_duration:.0f} seconds long.
 
 TRANSCRIPT:
 {formatted_transcript}
 
 Remember:
+- Return MAXIMUM {max_moments} moments (the best ones only)
 - Each moment MUST be a complete phrase (never cut mid-sentence)
 - Duration must be between {min_duration:.0f}-{max_duration:.0f} seconds
 - Use the EXACT timestamps from the transcript
-- Only return truly engaging moments
+- Keep the "reason" field SHORT (1-2 sentences max)
 
 Respond with JSON only."""
 

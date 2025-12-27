@@ -3,7 +3,7 @@
 from .client import (
     OpenRouterClient,
     AsyncOpenRouterClient,
-    GEMINI_25_PRO,
+    GEMINI_MODEL,
 )
 from .config import OpenRouterConfig
 from .exceptions import (
@@ -50,7 +50,7 @@ __all__ = [
     "OpenRouterClient",
     "AsyncOpenRouterClient",
     # Constants
-    "GEMINI_25_PRO",
+    "GEMINI_MODEL",
     # Config
     "OpenRouterConfig",
     # Rate Limiter

@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 # Default model for this client
-GEMINI_25_PRO = "google/gemini-2.5-pro"
+GEMINI_MODEL = "google/gemini-3-flash-preview"
 
 
 class OpenRouterClient:
@@ -149,7 +149,7 @@ class OpenRouterClient:
 
         response = self.chat_completion(
             messages=messages,
-            model=GEMINI_25_PRO,
+            model=GEMINI_MODEL,
             temperature=temperature,
             max_tokens=max_tokens,
             **kwargs,
@@ -627,7 +627,7 @@ class AsyncOpenRouterClient:
 
         response = await self.chat_completion(
             messages=messages,
-            model=GEMINI_25_PRO,
+            model=GEMINI_MODEL,
             temperature=temperature,
             max_tokens=max_tokens,
             **kwargs,
