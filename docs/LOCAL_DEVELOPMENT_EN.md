@@ -473,7 +473,7 @@ brew install ffmpeg
 cd backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 
 # 4. Create .env (in project root)
-cd .. && cp video-transcription-app/.env.example .env
+cd .. && cp .env.example .env
 # Edit .env - add OPENROUTER_API_KEY
 
 # 5. Create videos folder and add test video

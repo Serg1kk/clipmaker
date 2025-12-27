@@ -118,8 +118,8 @@ cd clipmaker
 Create a `.env` file in the project root with your configuration:
 
 ```bash
-# Copy the example (if available) or create new
-cp video-transcription-app/.env.example .env
+# Copy the example
+cp .env.example .env
 
 # Or create manually
 touch .env
@@ -1045,15 +1045,18 @@ ai-clips/
 │   └── fixtures/               # Test fixtures
 │
 ├── docs/                       # Documentation
+│   ├── LOCAL_DEVELOPMENT.md    # Setup guide (Russian)
+│   └── LOCAL_DEVELOPMENT_EN.md # Setup guide (English)
 │
 ├── videos/                     # Video input directory (mounted)
 ├── output/                     # Rendered clips output
 ├── uploads/                    # Temporary upload storage
 │
 ├── docker-compose.yml          # Multi-container orchestration
-├── .env                        # Environment configuration (create this)
+├── .env.example                # Environment template
 ├── .gitignore                  # Git ignore rules
-└── README.md                   # This file
+├── README.md                   # Documentation (English)
+└── README_RU.md                # Documentation (Russian)
 ```
 
 ---

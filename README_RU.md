@@ -116,8 +116,8 @@ cd clipmaker
 Создайте файл `.env` в корне проекта:
 
 ```bash
-# Скопировать пример (если доступен) или создать новый
-cp video-transcription-app/.env.example .env
+# Скопировать пример
+cp .env.example .env
 
 # Или создать вручную
 touch .env

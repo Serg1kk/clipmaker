@@ -28,26 +28,74 @@ Thumbs.db
 # Docker
 .docker/
 
-# Project specific
+# Project specific - runtime data
 output/*
 !output/.gitkeep
 videos/*
 !videos/.gitkeep
 uploads/*
+!uploads/.gitkeep
 backend/data/
+data/
 
 # Logs
 *.log
 logs/
 
-# Claude Flow runtime files (DO NOT COMMIT)
+# ===========================================
+# Claude Code / Claude Flow - DO NOT COMMIT
+# ===========================================
+.claude/
 .claude-flow/
-.swarm/*.db
-.swarm/*.db-shm
-.swarm/*.db-wal
-.hive-mind/*.db
-.hive-mind/*.db-shm
-.hive-mind/*.db-wal
-.hive-mind/sessions/
-memory/claude-flow*.json
-memory/sessions/*.json
+.swarm/
+.hive-mind/
+.mcp.json
+CLAUDE.md
+claude-flow
+
+# Memory and coordination (dev tools)
+memory/
+coordination/
+
+# Development scripts (local only)
+scripts/
+
+# Old/legacy folders
+video-transcription-app/
+
+# ===========================================
+# Tests (keep in repo but ignore coverage)
+# ===========================================
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+
+# ===========================================
+# Internal development docs (not for users)
+# ===========================================
+docs/ANALYSIS_README.md
+docs/ARCHITECTURE_*.md
+docs/COMPONENT_PATTERNS.md
+docs/EDGE_CASE_*.md
+docs/FILES_TO_CREATE.md
+docs/FONT*.md
+docs/FONTS*.md
+docs/IMPLEMENTATION_*.md
+docs/INDEX.md
+docs/INTEGRATION_*.md
+docs/MOMENTS_SIDEBAR_*.md
+docs/QUICK_REFERENCE.md
+docs/README.md
+docs/STATE_DIAGRAMS.md
+docs/TEST_*.md
+docs/VITEST_SETUP_GUIDE.md
+docs/WEBSOCKET_TEST_PLAN.md
+docs/architecture.md
+docs/requirements.md
+docs/storage-schema.md
+docs/test_strategy_openrouter.md
+
+# Internal docs in source code
+frontend/src/hooks/*.md
+frontend/src/hooks/*.txt
