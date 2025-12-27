@@ -58,13 +58,15 @@ cd clipmaker
 ```
 clipmaker/
 ├── backend/           # FastAPI сервер + Whisper
-├── frontend/          # React приложение
-├── docker/            # Docker конфигурации
+├── frontend/          # React приложение + nginx.conf
+├── docker/            # Docker конфигурации (CLI whisper)
+├── whisper/           # Whisper HTTP сервис (для production)
 ├── docs/              # Документация
 ├── videos/            # Папка для исходных видео
 ├── output/            # Результаты рендеринга
 ├── uploads/           # Временные загрузки
-├── docker-compose.yml
+├── docker-compose.yml              # Development конфиг
+├── docker-compose.production.yml   # Production конфиг (микросервисы)
 ├── README.md
 └── .env.example
 ```

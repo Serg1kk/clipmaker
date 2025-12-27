@@ -216,6 +216,75 @@ docker compose down -v
 
 ---
 
+## Docker Production (Микросервисы)
+
+Для production развёртывания с оптимизированным управлением ресурсами используйте микросервисную конфигурацию:
+
+```bash
+# Использовать production конфигурацию
+docker compose -f docker-compose.production.yml up -d --build
+```
+
+### Production Архитектура
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PRODUCTION МИКРОСЕРВИСНАЯ АРХИТЕКТУРА                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────┐                 │
+│  │  Frontend   │───▶│   Backend   │───▶│  Whisper Service│                 │
+│  │   (nginx)   │    │  (FastAPI)  │    │   (whisper.cpp) │                 │
+│  │  Port 3000  │    │  Port 8000  │    │    Port 8001    │                 │
+│  │  256MB RAM  │    │   2GB RAM   │    │    8GB RAM      │                 │
+│  └─────────────┘    └─────────────┘    └─────────────────┘                 │
+│         │                  │                    │                           │
+│         │                  ▼                    ▼                           │
+│         │           ┌─────────────┐      ┌─────────────┐                   │
+│         │           │  OpenRouter │      │   FFmpeg    │                   │
+│         │           │  (Gemini)   │      │  (Рендер)   │                   │
+│         │           └─────────────┘      └─────────────┘                   │
+│         │                                                                   │
+│         ▼                                                                   │
+│  ┌──────────────────────────────────────────────────────────────┐          │
+│  │   Shared Volumes: whisper-models, shared-processing, output  │          │
+│  └──────────────────────────────────────────────────────────────┘          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Возможности Production
+
+| Функция | Описание |
+|---------|----------|
+| **Лимиты ресурсов** | CPU и память ограничены для каждого сервиса |
+| **Health Checks** | Автоматический перезапуск при сбое |
+| **Изолированная сеть** | Сервисы общаются через внутреннюю сеть |
+| **Persistent Volumes** | Модели и данные сохраняются при перезапуске |
+| **Логирование** | JSON файлы с ротацией |
+| **ARM64 Оптимизация** | Нативная поддержка Apple Silicon |
+
+### Распределение ресурсов (16GB M1 Mac)
+
+| Сервис | Память | CPU | Назначение |
+|--------|--------|-----|------------|
+| **Whisper** | 8 GB | 6 ядер | Транскрипция (самый тяжёлый) |
+| **Backend** | 2 GB | 2 ядра | API и оркестрация |
+| **Frontend** | 256 MB | 0.5 ядра | Статические файлы |
+
+### Production vs Development
+
+| Аспект | Development | Production |
+|--------|-------------|------------|
+| Конфиг | `docker-compose.yml` | `docker-compose.production.yml` |
+| Whisper | Встроен в backend | Отдельный HTTP сервис |
+| Лимиты | Нет | Настроены для каждого сервиса |
+| Сеть | По умолчанию | Изолированная подсеть |
+| Логи | Консоль | JSON файлы с ротацией |
+| Health checks | Базовые | Расширенные |
+
+---
+
 ## Доступ к приложению
 
 После запуска сервисов, приложение доступно по адресам:
@@ -276,7 +345,7 @@ npm run dev
 clipmaker/
 ├── backend/                    # FastAPI Backend
 │   ├── main.py                 # Точка входа и API роуты
-│   ├── Dockerfile              # Конфигурация контейнера
+│   ├── Dockerfile              # Контейнер (с FFmpeg)
 │   ├── requirements.txt        # Python зависимости
 │   ├── models/                 # Pydantic модели данных
 │   ├── routers/                # API роутеры
@@ -288,10 +357,16 @@ clipmaker/
 │
 ├── frontend/                   # React Frontend (Vite + TypeScript)
 │   ├── Dockerfile              # Конфигурация контейнера
+│   ├── nginx.conf              # Полный nginx (WebSocket, streaming)
 │   ├── package.json            # Node.js зависимости
-│   └── src/
-│       ├── pages/              # Страницы
-│       └── components/         # UI компоненты
+│   └── src/                    # React исходники
+│
+├── docker/                     # CLI Whisper (development)
+│   └── Dockerfile              # Whisper CLI инструмент
+│
+├── whisper/                    # HTTP Whisper Service (production)
+│   ├── Dockerfile              # whisper.cpp с FastAPI оберткой
+│   └── requirements.txt        # Python зависимости
 │
 ├── docs/                       # Документация
 │   ├── LOCAL_DEVELOPMENT.md    # Руководство (RU)
@@ -299,10 +374,11 @@ clipmaker/
 │
 ├── videos/                     # Папка для исходных видео
 ├── output/                     # Готовые клипы
-├── docker-compose.yml          # Оркестрация контейнеров
-├── .env                        # Конфигурация (создать!)
-├── README.md                   # Документация (EN)
-└── README_RU.md                # Документация (RU) - этот файл
+├── docker-compose.yml              # Development конфигурация
+├── docker-compose.production.yml   # Production микросервисы
+├── .env.example                    # Шаблон конфигурации
+├── README.md                       # Документация (EN)
+└── README_RU.md                    # Документация (RU) - этот файл
 ```
 
 ---

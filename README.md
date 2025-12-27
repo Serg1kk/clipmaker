@@ -218,6 +218,75 @@ docker compose down -v
 
 ---
 
+## Docker Production Deployment (Microservices)
+
+For production deployment with optimized resource management, use the microservices configuration:
+
+```bash
+# Use production configuration
+docker compose -f docker-compose.production.yml up -d --build
+```
+
+### Production Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PRODUCTION MICROSERVICES ARCHITECTURE                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────────┐                 │
+│  │  Frontend   │───▶│   Backend   │───▶│  Whisper Service│                 │
+│  │   (nginx)   │    │  (FastAPI)  │    │   (whisper.cpp) │                 │
+│  │  Port 3000  │    │  Port 8000  │    │    Port 8001    │                 │
+│  │  256MB RAM  │    │   2GB RAM   │    │    8GB RAM      │                 │
+│  └─────────────┘    └─────────────┘    └─────────────────┘                 │
+│         │                  │                    │                           │
+│         │                  ▼                    ▼                           │
+│         │           ┌─────────────┐      ┌─────────────┐                   │
+│         │           │  OpenRouter │      │   FFmpeg    │                   │
+│         │           │  (Gemini)   │      │  (Render)   │                   │
+│         │           └─────────────┘      └─────────────┘                   │
+│         │                                                                   │
+│         ▼                                                                   │
+│  ┌──────────────────────────────────────────────────────────────┐          │
+│  │   Shared Volumes: whisper-models, shared-processing, output  │          │
+│  └──────────────────────────────────────────────────────────────┘          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Production Features
+
+| Feature | Description |
+|---------|-------------|
+| **Resource Limits** | CPU and memory limits per service |
+| **Health Checks** | Automatic restart on failure |
+| **Isolated Network** | Services communicate via internal network |
+| **Persistent Volumes** | Models and data survive restarts |
+| **Logging** | JSON file logging with rotation |
+| **ARM64 Optimized** | Native Apple Silicon support |
+
+### Resource Allocation (16GB M1 Mac)
+
+| Service | Memory Limit | CPU Limit | Purpose |
+|---------|--------------|-----------|---------|
+| **Whisper** | 8 GB | 6 cores | Transcription (heaviest) |
+| **Backend** | 2 GB | 2 cores | API & orchestration |
+| **Frontend** | 256 MB | 0.5 cores | Static file serving |
+
+### Production vs Development
+
+| Aspect | Development | Production |
+|--------|-------------|------------|
+| Config file | `docker-compose.yml` | `docker-compose.production.yml` |
+| Whisper | Integrated in backend | Separate HTTP service |
+| Resource limits | None | Configured per service |
+| Network | Default | Isolated subnet |
+| Logging | Console | JSON files with rotation |
+| Health checks | Basic | Comprehensive |
+
+---
+
 ## Accessing the Application
 
 Once the services are running, access the application at:
@@ -986,77 +1055,43 @@ docker compose exec backend fc-list | grep -i "arial"
 ai-clips/
 ├── backend/                    # FastAPI Backend Service
 │   ├── main.py                 # Application entry point & API routes
-│   ├── Dockerfile              # Backend container configuration
+│   ├── Dockerfile              # Backend container (with FFmpeg)
 │   ├── requirements.txt        # Python dependencies
 │   ├── models/                 # Pydantic data models
-│   │   └── transcription_moment.py
 │   ├── routers/                # API route modules
-│   │   └── projects.py         # Project CRUD endpoints
 │   └── services/               # Business logic services
 │       ├── ffmpeg_service.py       # Video/audio processing
 │       ├── whisper_service.py      # Speech-to-text transcription
 │       ├── render_service.py       # Final clip rendering
-│       ├── file_browser_service.py # Local file browsing
-│       ├── video_files_service.py  # Video file management
-│       ├── websocket_service.py    # Real-time progress updates
-│       ├── json_storage.py         # Data persistence
-│       ├── karaoke_generator.py    # Word-by-word subtitle sync
-│       ├── composite_service.py    # Clip composition
 │       ├── engaging_moments.py     # AI moment detection
 │       └── openrouter/             # OpenRouter API client
-│           ├── client.py           # HTTP client
-│           ├── config.py           # Configuration
-│           ├── models.py           # API models
-│           ├── rate_limiter.py     # Rate limiting
-│           └── exceptions.py       # Custom exceptions
 │
 ├── frontend/                   # React Frontend (Vite + TypeScript)
 │   ├── Dockerfile              # Frontend container configuration
+│   ├── nginx.conf              # Full nginx config (WebSocket, streaming)
 │   ├── package.json            # Node.js dependencies
-│   ├── vite.config.ts          # Vite configuration
-│   └── src/
-│       ├── main.tsx            # Application entry point
-│       ├── App.tsx             # Root component with routing
-│       ├── pages/              # Page components
-│       │   ├── Home.tsx            # Video browser & transcription
-│       │   ├── Projects.tsx        # Project management
-│       │   └── ProjectEditor.tsx   # Clip editing interface
-│       ├── components/         # Reusable UI components
-│       │   ├── VideoPlayer.tsx     # Video playback
-│       │   ├── VideoCard.tsx       # Video thumbnail cards
-│       │   ├── MomentsSidebar.tsx  # Engaging moments list
-│       │   ├── TemplateSelector.tsx # Clip templates
-│       │   ├── TextStylingPanel.tsx # Subtitle styling
-│       │   ├── ColorPicker.tsx     # Color selection
-│       │   ├── PositionSelector.tsx # Element positioning
-│       │   ├── cropper/            # Video cropping tools
-│       │   ├── subtitle/           # Subtitle components
-│       │   └── timeline/           # Timeline editor
-│       ├── hooks/              # Custom React hooks
-│       ├── services/           # API client services
-│       ├── constants/          # Application constants
-│       └── utils/              # Utility functions
+│   └── src/                    # React source code
 │
-├── docker/                     # Shared Docker configurations
-│   └── Dockerfile              # Whisper transcription service
+├── docker/                     # CLI Whisper (development)
+│   └── Dockerfile              # Whisper CLI tool
 │
-├── tests/                      # Test suites
-│   ├── unit/                   # Unit tests
-│   └── fixtures/               # Test fixtures
+├── whisper/                    # HTTP Whisper Service (production)
+│   ├── Dockerfile              # whisper.cpp with FastAPI wrapper
+│   └── requirements.txt        # Python dependencies
 │
 ├── docs/                       # Documentation
 │   ├── LOCAL_DEVELOPMENT.md    # Setup guide (Russian)
 │   └── LOCAL_DEVELOPMENT_EN.md # Setup guide (English)
 │
-├── videos/                     # Video input directory (mounted)
+├── videos/                     # Video input directory
 ├── output/                     # Rendered clips output
 ├── uploads/                    # Temporary upload storage
 │
-├── docker-compose.yml          # Multi-container orchestration
-├── .env.example                # Environment template
-├── .gitignore                  # Git ignore rules
-├── README.md                   # Documentation (English)
-└── README_RU.md                # Documentation (Russian)
+├── docker-compose.yml              # Development configuration
+├── docker-compose.production.yml   # Production microservices
+├── .env.example                    # Environment template
+├── README.md                       # Documentation (English)
+└── README_RU.md                    # Documentation (Russian)
 ```
 
 ---
