@@ -2,18 +2,81 @@
 
 A full-stack application for transcribing videos, identifying engaging moments using AI, and generating short-form clips with synchronized subtitles.
 
+## Quick Links
+
+| Guide | Description |
+|-------|-------------|
+| **[Local Development Guide](docs/LOCAL_DEVELOPMENT.md)** | Детальное руководство по локальному развёртыванию |
+| [Usage Guide](docs/USAGE_GUIDE.md) | Как пользоваться приложением |
+| [API Documentation](http://localhost:8000/docs) | Swagger/OpenAPI (после запуска) |
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        AI CLIPS STACK                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐         │
+│  │  Frontend   │───▶│   Backend   │───▶│   Whisper   │         │
+│  │   (React)   │    │  (FastAPI)  │    │   (Local)   │         │
+│  │  Port 5173  │    │  Port 8000  │    │  MPS/CUDA   │         │
+│  └─────────────┘    └─────────────┘    └─────────────┘         │
+│         │                  │                  │                 │
+│         │                  ▼                  ▼                 │
+│         │           ┌─────────────┐    ┌─────────────┐         │
+│         │           │   FFmpeg    │    │  OpenRouter │         │
+│         │           │  (Render)   │    │  (Gemini)   │         │
+│         │           └─────────────┘    └─────────────┘         │
+│         │                  │                                    │
+│         ▼                  ▼                                    │
+│  ┌──────────────────────────────────────────────────┐          │
+│  │              /videos (Source Files)              │          │
+│  └──────────────────────────────────────────────────┘          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Core Technologies
+
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| **Transcription** | OpenAI Whisper | Speech-to-text с word-level timestamps |
+| **AI Analysis** | Gemini (via OpenRouter) | Поиск engaging moments |
+| **Video Processing** | FFmpeg | Извлечение аудио, рендеринг клипов |
+| **Backend** | FastAPI + Python | REST API, WebSocket прогресс |
+| **Frontend** | React + Vite + TypeScript | UI интерфейс |
+
+### Whisper Models
+
+Whisper работает **полностью локально** на вашем компьютере:
+
+| Model | Size | Speed* | Quality | Best For |
+|-------|------|--------|---------|----------|
+| `tiny` | 75 MB | 32x | ⭐⭐ | Quick tests |
+| **`base`** | 142 MB | 16x | ⭐⭐⭐ | **Recommended** |
+| `small` | 466 MB | 6x | ⭐⭐⭐⭐ | Better accuracy |
+| `medium` | 1.5 GB | 2x | ⭐⭐⭐⭐⭐ | High quality |
+| `large` | 2.9 GB | 1x | ⭐⭐⭐⭐⭐ | Maximum quality |
+
+*Speed relative to real-time on Apple M1 with MPS acceleration
+
+---
+
 ## Prerequisites
 
 Before you begin, ensure you have the following installed on your system:
 
 ### Required Software
 
-| Software | Minimum Version | Download |
-|----------|-----------------|----------|
-| **Node.js** | 20.x or higher | [nodejs.org](https://nodejs.org/) |
-| **Python** | 3.12 or higher | [python.org](https://www.python.org/) |
-| **Docker** | 24.x or higher | [docker.com](https://www.docker.com/) |
-| **Docker Compose** | 2.x or higher | Included with Docker Desktop |
+| Software | Minimum Version | Download | Notes |
+|----------|-----------------|----------|-------|
+| **Node.js** | 20.x or higher | [nodejs.org](https://nodejs.org/) | Frontend |
+| **Python** | 3.11 or higher | [python.org](https://www.python.org/) | Backend + Whisper |
+| **FFmpeg** | 6.x or higher | `brew install ffmpeg` | Audio/Video processing |
+| **Docker** | 24.x (optional) | [docker.com](https://www.docker.com/) | Alternative deployment |
 
 ### Verify Installation
 
@@ -22,11 +85,13 @@ Before you begin, ensure you have the following installed on your system:
 node --version  # Should output v20.x.x or higher
 
 # Check Python
-python3 --version  # Should output Python 3.12.x or higher
+python3 --version  # Should output Python 3.11.x or higher
 
-# Check Docker
+# Check FFmpeg (required!)
+ffmpeg -version  # Should output ffmpeg version 6.x or higher
+
+# Check Docker (optional - for containerized deployment)
 docker --version  # Should output Docker version 24.x.x or higher
-docker compose version  # Should output Docker Compose version v2.x.x
 ```
 
 ### API Keys Required
