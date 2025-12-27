@@ -1,11 +1,33 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+
+// Debounce utility for auto-save operations
+function useDebouncedCallback<T extends (...args: Parameters<T>) => ReturnType<T>>(
+  callback: T,
+  delay: number
+): T {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callbackRef = useRef(callback);
+
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+
+  return useCallback((...args: Parameters<T>) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    timeoutRef.current = setTimeout(() => {
+      callbackRef.current(...args);
+    }, delay);
+  }, [delay]) as T;
+}
 import type { Project } from '../components/ProjectCard';
 import VideoFilePicker from '../components/VideoFilePicker';
 import VideoTimeline from '../components/timeline/VideoTimeline';
 import MomentsSidebar from '../components/MomentsSidebar';
 import PreviewLayoutWithCropper from '../components/cropper/PreviewLayoutWithCropper';
-import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE } from '../components/TextStylingPanel';
+import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE, FontFamily, TextPosition } from '../components/TextStylingPanel';
 import { TimelineMarker, TimeRange, engagingMomentToMarker } from '../components/timeline/types';
 import type { VideoFileMetadata } from '../services/api';
 import type { NormalizedCropCoordinates } from '../components/cropper/types';
@@ -42,6 +64,7 @@ interface ExtendedProject extends Project {
     subtitle_config?: Record<string, unknown>;
     rendered_path?: string | null;
   }>;
+  current_moment_id?: string | null;
 }
 
 // Progress state for jobs
@@ -93,6 +116,40 @@ const ProjectEditor = () => {
       setCurrentStage('edit-moments');
     }
   }, [project]);
+
+  // Restore selected moment state from project on initial load
+  useEffect(() => {
+    if (!project?.moments || project.moments.length === 0) return;
+
+    // If we have a saved current_moment_id, restore it
+    if (project.current_moment_id && !selectedMomentId) {
+      const savedMoment = project.moments.find(m => m.id === project.current_moment_id);
+      if (savedMoment) {
+        setSelectedMomentId(savedMoment.id);
+        setSelectedRange({ start: savedMoment.start, end: savedMoment.end });
+
+        // Restore crop settings
+        if (savedMoment.crop_template) {
+          setCropTemplate(savedMoment.crop_template as TemplateType);
+        }
+        if (savedMoment.crop_coordinates) {
+          setCropCoordinates(savedMoment.crop_coordinates as NormalizedCropCoordinates[]);
+        }
+
+        // Restore subtitle settings
+        if (savedMoment.subtitle_config) {
+          const cfg = savedMoment.subtitle_config as Record<string, unknown>;
+          setTextStyle({
+            subtitlesEnabled: cfg.enabled as boolean ?? true,
+            fontFamily: (cfg.font_family as FontFamily) ?? DEFAULT_TEXT_STYLE.fontFamily,
+            fontSize: cfg.font_size as number ?? DEFAULT_TEXT_STYLE.fontSize,
+            textColor: cfg.text_color as string ?? DEFAULT_TEXT_STYLE.textColor,
+            position: (cfg.position as TextPosition) ?? DEFAULT_TEXT_STYLE.position,
+          });
+        }
+      }
+    }
+  }, [project?.moments, project?.current_moment_id, selectedMomentId]);
 
   // Convert project moments to timeline markers
   const timelineMarkers = useMemo((): TimelineMarker[] => {
@@ -461,7 +518,7 @@ const ProjectEditor = () => {
   }, [projectId, selectedMoment, project?.video_path, cropTemplate, cropCoordinates, textStyle, refreshProject, renderProgress?.stage]);
 
   // Handle moment selection
-  const handleMomentClick = useCallback((marker: TimelineMarker) => {
+  const handleMomentClick = useCallback(async (marker: TimelineMarker) => {
     setSelectedMomentId(marker.id);
     // Seek video to moment start
     if (videoRef.current) {
@@ -469,7 +526,48 @@ const ProjectEditor = () => {
     }
     setCurrentTime(marker.startTime);
     setSelectedRange({ start: marker.startTime, end: marker.endTime });
-  }, []);
+
+    // Load the moment's saved settings
+    const moment = project?.moments?.find(m => m.id === marker.id);
+    if (moment) {
+      // Restore crop settings
+      if (moment.crop_template) {
+        setCropTemplate(moment.crop_template as TemplateType);
+      }
+      if (moment.crop_coordinates) {
+        setCropCoordinates(moment.crop_coordinates as NormalizedCropCoordinates[]);
+      } else {
+        setCropCoordinates([]);
+      }
+
+      // Restore subtitle settings
+      if (moment.subtitle_config) {
+        const cfg = moment.subtitle_config as Record<string, unknown>;
+        setTextStyle({
+          subtitlesEnabled: cfg.enabled as boolean ?? true,
+          fontFamily: (cfg.font_family as FontFamily) ?? DEFAULT_TEXT_STYLE.fontFamily,
+          fontSize: cfg.font_size as number ?? DEFAULT_TEXT_STYLE.fontSize,
+          textColor: cfg.text_color as string ?? DEFAULT_TEXT_STYLE.textColor,
+          position: (cfg.position as TextPosition) ?? DEFAULT_TEXT_STYLE.position,
+        });
+      } else {
+        setTextStyle(DEFAULT_TEXT_STYLE);
+      }
+    }
+
+    // Save current_moment_id to project for state persistence
+    if (projectId) {
+      try {
+        await fetch(`${API_BASE}/projects/${projectId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ current_moment_id: marker.id }),
+        });
+      } catch (e) {
+        console.error('Failed to save current moment:', e);
+      }
+    }
+  }, [project?.moments, projectId]);
 
   // Handle moment delete
   const handleMomentDelete = useCallback(async (momentId: string) => {
@@ -493,26 +591,36 @@ const ProjectEditor = () => {
     }
   }, [projectId, project?.moments, selectedMomentId, refreshProject]);
 
-  // Handle crop change - save to moment
-  const handleCropChange = useCallback(async (coords: NormalizedCropCoordinates[]) => {
-    setCropCoordinates(coords);
-
-    if (!projectId || !selectedMomentId) return;
-
-    // Save to backend
+  // Debounced save function for crop coordinates
+  const saveCropToBackend = useCallback(async (
+    coords: NormalizedCropCoordinates[],
+    template: TemplateType,
+    momentId: string
+  ) => {
+    if (!projectId) return;
     try {
-      await fetch(`${API_BASE}/projects/${projectId}/moments/${selectedMomentId}`, {
+      await fetch(`${API_BASE}/projects/${projectId}/moments/${momentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          crop_template: cropTemplate,
+          crop_template: template,
           crop_coordinates: coords,
         }),
       });
     } catch (e) {
       console.error('Failed to save crop:', e);
     }
-  }, [projectId, selectedMomentId, cropTemplate]);
+  }, [projectId]);
+
+  const debouncedSaveCrop = useDebouncedCallback(saveCropToBackend, 500);
+
+  // Handle crop change - save to moment with debouncing
+  const handleCropChange = useCallback((coords: NormalizedCropCoordinates[]) => {
+    setCropCoordinates(coords);
+
+    if (!selectedMomentId) return;
+    debouncedSaveCrop(coords, cropTemplate, selectedMomentId);
+  }, [selectedMomentId, cropTemplate, debouncedSaveCrop]);
 
   // Handle template change
   const handleTemplateChange = useCallback(async (template: TemplateType) => {
@@ -531,14 +639,14 @@ const ProjectEditor = () => {
     }
   }, [projectId, selectedMomentId]);
 
-  // Handle subtitle style change
-  const handleStyleChange = useCallback(async (style: TextStyle) => {
-    setTextStyle(style);
-
-    if (!projectId || !selectedMomentId) return;
-
+  // Debounced save function for subtitle config
+  const saveSubtitleToBackend = useCallback(async (
+    style: TextStyle,
+    momentId: string
+  ) => {
+    if (!projectId) return;
     try {
-      await fetch(`${API_BASE}/projects/${projectId}/moments/${selectedMomentId}`, {
+      await fetch(`${API_BASE}/projects/${projectId}/moments/${momentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -554,7 +662,17 @@ const ProjectEditor = () => {
     } catch (e) {
       console.error('Failed to save subtitle config:', e);
     }
-  }, [projectId, selectedMomentId]);
+  }, [projectId]);
+
+  const debouncedSaveSubtitle = useDebouncedCallback(saveSubtitleToBackend, 500);
+
+  // Handle subtitle style change with debouncing
+  const handleStyleChange = useCallback((style: TextStyle) => {
+    setTextStyle(style);
+
+    if (!selectedMomentId) return;
+    debouncedSaveSubtitle(style, selectedMomentId);
+  }, [selectedMomentId, debouncedSaveSubtitle]);
 
   // Video URL helper
   const getVideoUrl = (videoPath: string): string => {

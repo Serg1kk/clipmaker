@@ -57,6 +57,8 @@ class ProjectBase(BaseModel):
     transcription: Optional[TranscriptionData] = Field(default=None, description="Transcription result")
     # AI moments (persisted after finding moments)
     moments: list[MomentData] = Field(default_factory=list, description="AI-detected engaging moments")
+    # Currently selected moment ID (for state restoration)
+    current_moment_id: Optional[str] = Field(default=None, description="Currently selected moment ID")
 
 
 class ProjectCreate(ProjectBase):
@@ -73,6 +75,7 @@ class ProjectUpdate(BaseModel):
     metadata: Optional[dict] = Field(None, description="Additional project metadata")
     transcription: Optional[TranscriptionData] = Field(None, description="Transcription result")
     moments: Optional[list[MomentData]] = Field(None, description="AI-detected engaging moments")
+    current_moment_id: Optional[str] = Field(None, description="Currently selected moment ID")
 
 
 class Project(ProjectBase):
