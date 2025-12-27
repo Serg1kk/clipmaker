@@ -118,8 +118,8 @@ describe('VideoFrameCropper', () => {
       render(<VideoFrameCropper {...defaultProps} template="1-frame" />);
       mockImageLoad();
       await waitFor(() => {
-        expect(screen.getByTestId('crop-rectangle-crop-1')).toBeInTheDocument();
-        expect(screen.queryByTestId('crop-rectangle-crop-2')).not.toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('crop-rectangle-frame-2')).not.toBeInTheDocument();
       });
     });
 
@@ -127,9 +127,9 @@ describe('VideoFrameCropper', () => {
       render(<VideoFrameCropper {...defaultProps} template="2-frame" />);
       mockImageLoad();
       await waitFor(() => {
-        expect(screen.getByTestId('crop-rectangle-crop-1')).toBeInTheDocument();
-        expect(screen.getByTestId('crop-rectangle-crop-2')).toBeInTheDocument();
-        expect(screen.queryByTestId('crop-rectangle-crop-3')).not.toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-1')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-2')).toBeInTheDocument();
+        expect(screen.queryByTestId('crop-rectangle-frame-3')).not.toBeInTheDocument();
       });
     });
 
@@ -137,9 +137,9 @@ describe('VideoFrameCropper', () => {
       render(<VideoFrameCropper {...defaultProps} template="3-frame" />);
       mockImageLoad();
       await waitFor(() => {
-        expect(screen.getByTestId('crop-rectangle-crop-1')).toBeInTheDocument();
-        expect(screen.getByTestId('crop-rectangle-crop-2')).toBeInTheDocument();
-        expect(screen.getByTestId('crop-rectangle-crop-3')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-1')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-2')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-3')).toBeInTheDocument();
       });
     });
 
@@ -147,7 +147,7 @@ describe('VideoFrameCropper', () => {
       render(<VideoFrameCropper {...defaultProps} template="1-frame" />);
       mockImageLoad();
       await waitFor(() => {
-        expect(screen.getByTestId('crop-label-crop-1')).toHaveTextContent('Crop Area');
+        expect(screen.getByTestId('crop-label-frame-1')).toHaveTextContent('Crop Area');
       });
     });
 
@@ -155,9 +155,9 @@ describe('VideoFrameCropper', () => {
       render(<VideoFrameCropper {...defaultProps} template="3-frame" />);
       mockImageLoad();
       await waitFor(() => {
-        expect(screen.getByTestId('crop-label-crop-1')).toHaveTextContent('Frame 1');
-        expect(screen.getByTestId('crop-label-crop-2')).toHaveTextContent('Frame 2');
-        expect(screen.getByTestId('crop-label-crop-3')).toHaveTextContent('Frame 3');
+        expect(screen.getByTestId('crop-label-frame-1')).toHaveTextContent('Frame 1');
+        expect(screen.getByTestId('crop-label-frame-2')).toHaveTextContent('Frame 2');
+        expect(screen.getByTestId('crop-label-frame-3')).toHaveTextContent('Frame 3');
       });
     });
   });
@@ -177,11 +177,11 @@ describe('VideoFrameCropper', () => {
       mockImageLoad();
 
       await waitFor(() => {
-        expect(screen.getByTestId('crop-rectangle-crop-1')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-1')).toBeInTheDocument();
       });
 
       // Verify the component renders with callbacks available
-      const rectangle = screen.getByTestId('crop-rectangle-crop-1');
+      const rectangle = screen.getByTestId('crop-rectangle-frame-1');
       expect(rectangle).toBeInTheDocument();
     });
 
@@ -198,8 +198,8 @@ describe('VideoFrameCropper', () => {
 
       await waitFor(() => {
         // Both rectangles should render
-        expect(screen.getByTestId('crop-rectangle-crop-1')).toBeInTheDocument();
-        expect(screen.getByTestId('crop-rectangle-crop-2')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-1')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-2')).toBeInTheDocument();
       });
     });
   });
@@ -225,8 +225,8 @@ describe('VideoFrameCropper', () => {
       render(<VideoFrameCropper {...defaultProps} template="2-frame" showCoordinates />);
       mockImageLoad();
       await waitFor(() => {
-        expect(screen.getByTestId('coord-display-crop-1')).toBeInTheDocument();
-        expect(screen.getByTestId('coord-display-crop-2')).toBeInTheDocument();
+        expect(screen.getByTestId('coord-display-frame-1')).toBeInTheDocument();
+        expect(screen.getByTestId('coord-display-frame-2')).toBeInTheDocument();
       });
     });
   });
@@ -234,7 +234,7 @@ describe('VideoFrameCropper', () => {
   describe('Initial coordinates', () => {
     it('uses provided initial coordinates', async () => {
       const initialCoordinates: CropCoordinates[] = [
-        { id: 'crop-1', x: 100, y: 100, width: 200, height: 200 }
+        { id: 'frame-1', x: 100, y: 100, width: 200, height: 200 }
       ];
 
       const onCropChange = jest.fn();
@@ -250,7 +250,7 @@ describe('VideoFrameCropper', () => {
       mockImageLoad();
 
       await waitFor(() => {
-        const coordDisplay = screen.getByTestId('coord-display-crop-1');
+        const coordDisplay = screen.getByTestId('coord-display-frame-1');
         expect(coordDisplay).toHaveTextContent('x: 100');
         expect(coordDisplay).toHaveTextContent('y: 100');
         expect(coordDisplay).toHaveTextContent('w: 200');
@@ -265,8 +265,8 @@ describe('VideoFrameCropper', () => {
       mockImageLoad();
 
       await waitFor(() => {
-        const rect1 = screen.getByTestId('crop-rectangle-crop-1');
-        const rect2 = screen.getByTestId('crop-rectangle-crop-2');
+        const rect1 = screen.getByTestId('crop-rectangle-frame-1');
+        const rect2 = screen.getByTestId('crop-rectangle-frame-2');
         expect(rect1).toHaveClass('opacity-50');
         expect(rect2).toHaveClass('opacity-50');
       });
@@ -279,10 +279,10 @@ describe('VideoFrameCropper', () => {
       mockImageLoad();
 
       await waitFor(() => {
-        expect(screen.getByTestId('crop-rectangle-crop-1')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-1')).toBeInTheDocument();
       });
 
-      const rectangle = screen.getByTestId('crop-rectangle-crop-1');
+      const rectangle = screen.getByTestId('crop-rectangle-frame-1');
       fireEvent.click(rectangle);
 
       await waitFor(() => {
@@ -295,10 +295,10 @@ describe('VideoFrameCropper', () => {
       mockImageLoad();
 
       await waitFor(() => {
-        expect(screen.getByTestId('crop-rectangle-crop-1')).toBeInTheDocument();
+        expect(screen.getByTestId('crop-rectangle-frame-1')).toBeInTheDocument();
       });
 
-      const rectangle = screen.getByTestId('crop-rectangle-crop-1');
+      const rectangle = screen.getByTestId('crop-rectangle-frame-1');
       fireEvent.click(rectangle);
 
       const container = screen.getByTestId('cropper-container');
@@ -316,7 +316,7 @@ describe('VideoFrameCropper', () => {
       mockImageLoad();
 
       await waitFor(() => {
-        const rectangle = screen.getByTestId('crop-rectangle-crop-1');
+        const rectangle = screen.getByTestId('crop-rectangle-frame-1');
         expect(rectangle).toHaveAttribute('role', 'button');
         expect(rectangle).toHaveAttribute('tabIndex', '0');
         expect(rectangle).toHaveAttribute('aria-label');
@@ -340,11 +340,11 @@ describe('CropRectangle integration', () => {
     fireEvent.load(img);
 
     await waitFor(() => {
-      expect(screen.getByTestId('crop-rectangle-crop-1')).toBeInTheDocument();
+      expect(screen.getByTestId('crop-rectangle-frame-1')).toBeInTheDocument();
     });
 
     // Click to select
-    const rectangle = screen.getByTestId('crop-rectangle-crop-1');
+    const rectangle = screen.getByTestId('crop-rectangle-frame-1');
     fireEvent.click(rectangle);
 
     // Check for resize handles

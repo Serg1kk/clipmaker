@@ -249,49 +249,49 @@ export function generateDefaultCropAreas(
     ];
   }
 
-  // Template 3: Three frames
-  // Frame 1 & 2: 1:1 square (15% width), top-left and top-right
-  // Frame 3: 16:9 wide (30% width), bottom-center
-  const speakerAspectRatio = 1; // Square
-  const screenAspectRatio = 16 / 9; // Wide horizontal
+  // Template 3: Three frames matching TEMPLATE_3_FRAME exactly:
+  // Frame 1 & 2: 540x480 each (9:8 aspect ratio = 1.125)
+  // Frame 3: 1080x1440 (3:4 aspect ratio = 0.75 - vertical/tall)
+  const topFrameAspectRatio = 9 / 8; // 1.125 - slightly wider than tall
+  const bottomFrameAspectRatio = 3 / 4; // 0.75 - vertical (taller than wide)
 
-  const speakerWidth = 0.15;
-  // For square: height = width * sourceAspectRatio
-  const speakerHeight = speakerWidth * sourceAspectRatio;
-  const clampedSpeakerHeight = Math.min(speakerHeight, 0.35); // Max 35% height
+  const topFrameWidth = 0.18;
+  // For 9:8: height = width / aspectRatio * sourceAspectRatio
+  const topFrameHeight = (topFrameWidth / topFrameAspectRatio) * sourceAspectRatio;
+  const clampedTopFrameHeight = Math.min(topFrameHeight, 0.35); // Max 35% height
 
-  const screenWidth = 0.30;
-  // For 16:9: height = width / aspectRatio * sourceAspectRatio
-  const screenHeight = (screenWidth / screenAspectRatio) * sourceAspectRatio;
-  const clampedScreenHeight = Math.min(screenHeight, 0.4); // Max 40% height
+  const bottomFrameWidth = 0.40;
+  // For 3:4 (vertical): height = width / aspectRatio * sourceAspectRatio
+  const bottomFrameHeight = (bottomFrameWidth / bottomFrameAspectRatio) * sourceAspectRatio;
+  const clampedBottomFrameHeight = Math.min(bottomFrameHeight, 0.55); // Max 55% height
 
   return [
     {
-      // Top-left speaker (square)
+      // Top-left frame (9:8)
       id: template.frames[0].id,
       x: 0.05,
       y: 0.05,
-      width: speakerWidth,
-      height: clampedSpeakerHeight,
-      targetAspectRatio: speakerAspectRatio,
+      width: topFrameWidth,
+      height: clampedTopFrameHeight,
+      targetAspectRatio: topFrameAspectRatio,
     },
     {
-      // Top-right speaker (square)
+      // Top-right frame (9:8)
       id: template.frames[1].id,
-      x: 0.80, // Right side with some margin
+      x: 0.77, // Right side with some margin
       y: 0.05,
-      width: speakerWidth,
-      height: clampedSpeakerHeight,
-      targetAspectRatio: speakerAspectRatio,
+      width: topFrameWidth,
+      height: clampedTopFrameHeight,
+      targetAspectRatio: topFrameAspectRatio,
     },
     {
-      // Bottom screen (16:9 wide)
+      // Bottom main frame (3:4 vertical)
       id: template.frames[2].id,
-      x: (1 - screenWidth) / 2, // Centered horizontally
-      y: 0.55, // Lower half
-      width: screenWidth,
-      height: clampedScreenHeight,
-      targetAspectRatio: screenAspectRatio,
+      x: (1 - bottomFrameWidth) / 2, // Centered horizontally
+      y: 0.40, // Lower area
+      width: bottomFrameWidth,
+      height: clampedBottomFrameHeight,
+      targetAspectRatio: bottomFrameAspectRatio,
     },
   ];
 }

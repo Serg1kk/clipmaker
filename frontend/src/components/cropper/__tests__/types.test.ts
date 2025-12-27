@@ -138,15 +138,15 @@ describe('getTemplateConfig', () => {
       const config = getTemplateConfig('3-frame');
       const [topLeft, topRight, bottom] = config.defaultPositions;
 
-      // Speaker frames should be small (~15% width) and square (1:1)
-      expect(topLeft.width).toBeGreaterThanOrEqual(0.12);
-      expect(topLeft.width).toBeLessThanOrEqual(0.20);
-      expect(topLeft.aspectRatio).toBeCloseTo(1, 1);
-      expect(topRight.aspectRatio).toBeCloseTo(1, 1);
-      // Screen frame should be wider (~30% width) and 16:9
-      expect(bottom.width).toBeGreaterThanOrEqual(0.25);
-      expect(bottom.width).toBeLessThanOrEqual(0.35);
-      expect(bottom.aspectRatio).toBeCloseTo(16 / 9, 2);
+      // Top frames should be small (~18% width) and 9:8 aspect ratio (1.125)
+      expect(topLeft.width).toBeGreaterThanOrEqual(0.15);
+      expect(topLeft.width).toBeLessThanOrEqual(0.22);
+      expect(topLeft.aspectRatio).toBeCloseTo(9 / 8, 2); // 1.125
+      expect(topRight.aspectRatio).toBeCloseTo(9 / 8, 2); // 1.125
+      // Bottom frame should be wider (~40% width) and 3:4 vertical (0.75)
+      expect(bottom.width).toBeGreaterThanOrEqual(0.35);
+      expect(bottom.width).toBeLessThanOrEqual(0.45);
+      expect(bottom.aspectRatio).toBeCloseTo(3 / 4, 2); // 0.75
     });
   });
 

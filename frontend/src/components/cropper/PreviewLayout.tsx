@@ -38,12 +38,12 @@ const PREVIEW_LAYOUTS: Record<TemplateType, PreviewFramePosition[]> = {
     { x: 0, y: 0.5, width: 1, height: 0.5 }
   ],
   '3-frame': [
-    // Top-left speaker: 50% width, 40% height
-    { x: 0, y: 0, width: 0.5, height: 0.4 },
-    // Top-right speaker: 50% width, 40% height
-    { x: 0.5, y: 0, width: 0.5, height: 0.4 },
-    // Bottom screen/presentation: full width, 60% height
-    { x: 0, y: 0.4, width: 1, height: 0.6 }
+    // Top-left speaker: 50% width, 25% height (540x480 in 1080x1920 = 480/1920)
+    { x: 0, y: 0, width: 0.5, height: 0.25 },
+    // Top-right speaker: 50% width, 25% height (540x480 in 1080x1920)
+    { x: 0.5, y: 0, width: 0.5, height: 0.25 },
+    // Bottom main: full width, 75% height (1080x1440 in 1080x1920 = 1440/1920)
+    { x: 0, y: 0.25, width: 1, height: 0.75 }
   ]
 };
 

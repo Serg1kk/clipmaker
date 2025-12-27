@@ -65,7 +65,7 @@ function generateInitialCoordinates(
   );
 
   return cropAreas.map((area, index) => ({
-    id: `crop-${index + 1}`,
+    id: `frame-${index + 1}`,
     x: Math.round(area.x * containerWidth),
     y: Math.round(area.y * containerHeight),
     width: Math.round(area.width * containerWidth),

@@ -197,34 +197,35 @@ export function getTemplateConfig(template: TemplateType): TemplateRectangleConf
         ],
       };
     case '3-frame':
-      // Three frames: Two 1:1 squares on top, one 16:9 wide on bottom
-      // All small and non-overlapping
+      // Three frames matching backend/templates.ts exactly:
+      // - frame-1 & frame-2: 540x480 each (9:8 aspect ratio = 1.125)
+      // - frame-3: 1080x1440 (3:4 aspect ratio = 0.75)
       return {
         count: 3,
         defaultPositions: [
           {
-            // Top-left speaker - square
+            // Top-left frame - 9:8 slightly horizontal
             x: 0.05,
             y: 0.05,
-            width: 0.15,
-            height: 0.27, // Square adjusted for 16:9 source
-            aspectRatio: 1, // 1:1 square
+            width: 0.18,
+            height: 0.28, // 9:8 ratio adjusted for 16:9 source
+            aspectRatio: 9 / 8, // 1.125 - matches 540x480
           },
           {
-            // Top-right speaker - square
-            x: 0.80,
+            // Top-right frame - 9:8 slightly horizontal
+            x: 0.77,
             y: 0.05,
-            width: 0.15,
-            height: 0.27, // Square adjusted for 16:9 source
-            aspectRatio: 1, // 1:1 square
+            width: 0.18,
+            height: 0.28, // 9:8 ratio adjusted for 16:9 source
+            aspectRatio: 9 / 8, // 1.125 - matches 540x480
           },
           {
-            // Bottom screen - 16:9 wide horizontal
-            x: 0.35, // Centered: (1 - 0.30) / 2
-            y: 0.55,
-            width: 0.30,
-            height: 0.30, // 16:9 ratio on 16:9 source
-            aspectRatio: 16 / 9, // 1.778
+            // Bottom main frame - 3:4 vertical (tall)
+            x: 0.30, // Centered: (1 - 0.40) / 2
+            y: 0.40,
+            width: 0.40,
+            height: 0.55, // 3:4 ratio on 16:9 source
+            aspectRatio: 3 / 4, // 0.75 - matches 1080x1440
           },
         ],
       };
