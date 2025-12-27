@@ -315,73 +315,28 @@ async def process_transcription(job_id: str) -> None:
             eta_seconds=int(video_info.duration * 2),  # Rough ETA
         )
 
-        # Track transcription progress with simulated updates
-        transcription_done = False
-        current_simulated_progress = 25.0
-        main_loop = asyncio.get_event_loop()
-
-        # Whisper progress callback (called from thread, needs thread-safe update)
+        # Simple progress callback for Whisper (no async - just update job state)
         def on_whisper_progress(progress: float, message: str) -> None:
-            nonlocal current_simulated_progress
             # Map Whisper progress (0-100) to our progress (25-90)
             mapped_progress = 25.0 + (progress * 0.65)
-            current_simulated_progress = mapped_progress
             job.progress = mapped_progress
             job.updated_at = datetime.utcnow()
-            # Schedule coroutine on main event loop from thread
-            asyncio.run_coroutine_threadsafe(
-                tracker.update_progress(
-                    stage=ProgressStage.TRANSCRIBING,
-                    progress=mapped_progress,
-                    message=message,
-                    current_step=2,
-                    eta_seconds=None,
-                ),
-                main_loop
-            )
 
-        # Background task to simulate progress during long transcription
-        async def simulate_progress():
-            nonlocal current_simulated_progress
-            # Estimate: ~1 second of audio = ~0.5 seconds of processing
-            estimated_duration = max(video_info.duration * 0.5, 10)
-            increment = 50.0 / estimated_duration  # Progress from 30% to 80% over estimated time
-
-            while not transcription_done and current_simulated_progress < 80.0:
-                await asyncio.sleep(2)  # Update every 2 seconds
-                if transcription_done:
-                    break
-                # Only update if Whisper hasn't sent a recent update
-                if current_simulated_progress < 80.0:
-                    current_simulated_progress = min(current_simulated_progress + increment * 2, 79.0)
-                    await tracker.update_progress(
-                        stage=ProgressStage.TRANSCRIBING,
-                        progress=current_simulated_progress,
-                        message="Transcribing audio...",
-                        current_step=2,
-                        eta_seconds=None,
-                    )
-                    job.progress = current_simulated_progress
-                    job.updated_at = datetime.utcnow()
-
-        # Start simulated progress task
-        progress_task = asyncio.create_task(simulate_progress())
-
-        # Run transcription with word-level timestamps (blocking call in thread)
-        transcription_result: TranscriptionResult = await asyncio.to_thread(
-            whisper_service.transcribe_with_word_timestamps,
+        # Run transcription with word-level timestamps
+        transcription_result: TranscriptionResult = whisper_service.transcribe_with_word_timestamps(
             audio_path=str(audio_path),
             word_timestamps=True,
             progress_callback=on_whisper_progress,
         )
 
-        # Stop simulated progress
-        transcription_done = True
-        progress_task.cancel()
-        try:
-            await progress_task
-        except asyncio.CancelledError:
-            pass
+        # Send progress update after transcription completes
+        await tracker.update_progress(
+            stage=ProgressStage.TRANSCRIBING,
+            progress=85.0,
+            message="Transcription complete, processing results...",
+            current_step=2,
+            eta_seconds=None,
+        )
 
         job.progress = 90.0
         job.updated_at = datetime.utcnow()
