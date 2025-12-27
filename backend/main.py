@@ -907,6 +907,69 @@ async def get_video_file_info(
     return response
 
 
+# =============================================================================
+# Video Streaming Endpoint
+# =============================================================================
+
+
+@app.get(
+    "/video-stream",
+    summary="Stream video file",
+    description="Stream a video file for playback in the browser",
+    tags=["Video Files"],
+)
+async def stream_video(
+    path: str = Query(
+        ...,
+        description="Full path to the video file",
+    ),
+):
+    """
+    Stream a video file for playback.
+
+    This endpoint serves video files with proper streaming support
+    for browser video players.
+
+    Args:
+        path: Full path to the video file
+
+    Returns:
+        FileResponse with the video content
+
+    Raises:
+        HTTPException: 404 if file not found, 400 if invalid file type
+    """
+    from fastapi.responses import FileResponse
+    import mimetypes
+
+    video_path = Path(path)
+
+    # Security: Check if file exists
+    if not video_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Video file not found: {path}",
+        )
+
+    # Security: Verify it's a video file
+    if video_path.suffix.lower() not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Allowed: {', '.join(ALLOWED_EXTENSIONS)}",
+        )
+
+    # Get MIME type
+    mime_type, _ = mimetypes.guess_type(str(video_path))
+    if not mime_type:
+        mime_type = "video/mp4"  # Default fallback
+
+    return FileResponse(
+        path=str(video_path),
+        media_type=mime_type,
+        filename=video_path.name,
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc: Exception) -> JSONResponse:
     """Global exception handler for unhandled errors."""
