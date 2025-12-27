@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect, useCallback, useState, RefObject } from 'react';
 import { TemplateType } from '../TemplateSelector';
 import { NormalizedCropCoordinates } from './types';
 import SubtitlePreviewOverlay from './SubtitlePreviewOverlay';
@@ -24,8 +24,8 @@ interface PreviewFramePosition {
  * Layout specifications:
  * - 1-frame: Single full-height frame (100% height)
  * - 2-frame: Two frames stacked vertically (50% height each)
- * - 3-frame: Two small square frames on top for speakers (25% height, 50% width each)
- *            plus one large wide frame below for screen/presentation (75% height, full width)
+ * - 3-frame: Two small frames on top (40% height total, 50% width each)
+ *            plus one large wide frame below for screen/presentation (60% height, full width)
  */
 const PREVIEW_LAYOUTS: Record<TemplateType, PreviewFramePosition[]> = {
   '1-frame': [
@@ -36,12 +36,12 @@ const PREVIEW_LAYOUTS: Record<TemplateType, PreviewFramePosition[]> = {
     { x: 0, y: 0.5, width: 1, height: 0.5 }
   ],
   '3-frame': [
-    // Top-left speaker: 50% width, 25% height (nearly square)
-    { x: 0, y: 0, width: 0.5, height: 0.25 },
-    // Top-right speaker: 50% width, 25% height (nearly square)
-    { x: 0.5, y: 0, width: 0.5, height: 0.25 },
-    // Bottom screen/presentation: full width, 75% height
-    { x: 0, y: 0.25, width: 1, height: 0.75 }
+    // Top-left speaker: 50% width, 40% height
+    { x: 0, y: 0, width: 0.5, height: 0.4 },
+    // Top-right speaker: 50% width, 40% height
+    { x: 0.5, y: 0, width: 0.5, height: 0.4 },
+    // Bottom screen/presentation: full width, 60% height
+    { x: 0, y: 0.4, width: 1, height: 0.6 }
   ]
 };
 
@@ -69,6 +69,10 @@ export interface PreviewLayoutProps {
   textStyle?: TextStyle;
   /** Sample subtitle text to display */
   subtitleText?: string;
+  /** Reference to the main video player for synchronization */
+  mainVideoRef?: RefObject<HTMLVideoElement>;
+  /** Current playback time in seconds (for external sync control) */
+  currentTime?: number;
 }
 
 /**
@@ -77,7 +81,7 @@ export interface PreviewLayoutProps {
  */
 function calculateCropStyle(
   normalizedCoord: NormalizedCropCoordinates,
-  framePosition: PreviewFramePosition
+  _framePosition: PreviewFramePosition
 ): React.CSSProperties {
   // The crop area in the source image
   const cropX = normalizedCoord.x;
@@ -104,6 +108,145 @@ function calculateCropStyle(
     backgroundPosition: `${Math.min(100, Math.max(0, posX))}% ${Math.min(100, Math.max(0, posY))}%`,
     backgroundRepeat: 'no-repeat'
   };
+}
+
+/**
+ * VideoFramePreview - A single video frame in the preview with cropping
+ */
+interface VideoFramePreviewProps {
+  src: string;
+  coord: NormalizedCropCoordinates;
+  mainVideoRef?: RefObject<HTMLVideoElement>;
+  currentTime?: number;
+  index: number;
+}
+
+const VideoFramePreview = ({
+  src,
+  coord,
+  mainVideoRef,
+  currentTime,
+  index
+}: VideoFramePreviewProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const lastSyncTime = useRef<number>(0);
+  const syncThrottle = 100; // ms between syncs
+
+  // Sync time with main video
+  const syncWithMainVideo = useCallback(() => {
+    const video = videoRef.current;
+    const mainVideo = mainVideoRef?.current;
+
+    if (!video || !mainVideo) return;
+
+    // Don't sync too frequently
+    const now = Date.now();
+    if (now - lastSyncTime.current < syncThrottle) return;
+    lastSyncTime.current = now;
+
+    // Only sync if times differ significantly (more than 0.1s)
+    if (Math.abs(video.currentTime - mainVideo.currentTime) > 0.1) {
+      video.currentTime = mainVideo.currentTime;
+    }
+
+    // Sync play state
+    if (mainVideo.paused && !video.paused) {
+      video.pause();
+    } else if (!mainVideo.paused && video.paused) {
+      video.play().catch(() => {});
+    }
+  }, [mainVideoRef]);
+
+  // Sync with currentTime prop
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || currentTime === undefined) return;
+
+    if (Math.abs(video.currentTime - currentTime) > 0.1) {
+      video.currentTime = currentTime;
+    }
+  }, [currentTime]);
+
+  // Set up time sync with main video
+  useEffect(() => {
+    const mainVideo = mainVideoRef?.current;
+    if (!mainVideo) return;
+
+    const handleTimeUpdate = () => syncWithMainVideo();
+    const handleSeeked = () => syncWithMainVideo();
+    const handlePlay = () => {
+      const video = videoRef.current;
+      if (video) {
+        video.currentTime = mainVideo.currentTime;
+        video.play().catch(() => {});
+      }
+    };
+    const handlePause = () => {
+      const video = videoRef.current;
+      if (video) video.pause();
+    };
+
+    mainVideo.addEventListener('timeupdate', handleTimeUpdate);
+    mainVideo.addEventListener('seeked', handleSeeked);
+    mainVideo.addEventListener('play', handlePlay);
+    mainVideo.addEventListener('pause', handlePause);
+
+    // Initial sync
+    syncWithMainVideo();
+
+    return () => {
+      mainVideo.removeEventListener('timeupdate', handleTimeUpdate);
+      mainVideo.removeEventListener('seeked', handleSeeked);
+      mainVideo.removeEventListener('play', handlePlay);
+      mainVideo.removeEventListener('pause', handlePause);
+    };
+  }, [mainVideoRef, syncWithMainVideo]);
+
+  const handleLoadedData = useCallback(() => {
+    setIsLoaded(true);
+    // Sync time immediately after load
+    const mainVideo = mainVideoRef?.current;
+    const video = videoRef.current;
+    if (mainVideo && video) {
+      video.currentTime = mainVideo.currentTime;
+      if (!mainVideo.paused) {
+        video.play().catch(() => {});
+      }
+    } else if (currentTime !== undefined && video) {
+      video.currentTime = currentTime;
+    }
+  }, [mainVideoRef, currentTime]);
+
+  return (
+    <div
+      className="w-full h-full relative"
+      style={{ overflow: 'hidden' }}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        className="absolute"
+        style={{
+          width: `${100 / coord.width}%`,
+          height: `${100 / coord.height}%`,
+          left: `-${coord.x * (100 / coord.width)}%`,
+          top: `-${coord.y * (100 / coord.height)}%`,
+          objectFit: 'cover',
+        }}
+        onLoadedData={handleLoadedData}
+        muted
+        playsInline
+        loop
+        data-testid={`preview-video-${index}`}
+      />
+      {!isLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-900">
+          <div className="animate-pulse text-gray-500 text-xs">Loading...</div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -143,7 +286,9 @@ const PreviewLayout = ({
   showFrameBorders = false,
   backgroundColor = '#000',
   textStyle,
-  subtitleText = 'Sample Subtitle'
+  subtitleText = 'Sample Subtitle',
+  mainVideoRef,
+  currentTime
 }: PreviewLayoutProps) => {
   // Calculate height for 9:16 aspect ratio
   const height = Math.round(width * (16 / 9));
@@ -163,6 +308,9 @@ const PreviewLayout = ({
     });
   }, [framePositions, normalizedCoordinates]);
 
+  // Check if we should render video (has video source and proper srcType)
+  const isVideoSource = srcType === 'video' && src;
+
   return (
     <div
       className={`preview-layout relative overflow-hidden rounded-lg ${className}`}
@@ -177,17 +325,46 @@ const PreviewLayout = ({
       {/* Render each frame based on template layout */}
       {frames.map(({ position, coord, id }, index) => {
         // Calculate pixel dimensions for this frame
+        const frameWidth = position.width * width;
+        const frameHeight = position.height * height;
         const frameStyle: React.CSSProperties = {
           position: 'absolute',
           left: position.x * width,
           top: position.y * height,
-          width: position.width * width,
-          height: position.height * height,
+          width: frameWidth,
+          height: frameHeight,
           overflow: 'hidden'
         };
 
         // If we have coordinates, show the cropped region
         if (coord && coord.width > 0 && coord.height > 0) {
+          // For video sources, use VideoFramePreview component
+          if (isVideoSource) {
+            return (
+              <div
+                key={id}
+                className={`preview-frame ${showFrameBorders ? 'border border-white/30' : ''}`}
+                style={frameStyle}
+                data-testid={`preview-frame-${index}`}
+              >
+                <VideoFramePreview
+                  src={src}
+                  coord={coord}
+                  mainVideoRef={mainVideoRef}
+                  currentTime={currentTime}
+                  index={index}
+                />
+                {/* Frame label for debugging */}
+                {showFrameBorders && (
+                  <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-xs text-white z-10">
+                    Frame {index + 1}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // For image sources, use background-image CSS approach
           const cropStyle = calculateCropStyle(coord, position);
 
           return (

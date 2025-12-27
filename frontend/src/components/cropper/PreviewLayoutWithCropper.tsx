@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, RefObject } from 'react';
 import TemplateSelector, { TemplateType } from '../TemplateSelector';
 import VideoFrameCropper from './VideoFrameCropper';
 import PreviewLayout from './PreviewLayout';
@@ -35,6 +35,10 @@ export interface PreviewLayoutWithCropperProps {
   subtitleText?: string;
   /** Compact mode - shows only preview without cropper and template selector */
   compactMode?: boolean;
+  /** Reference to the main video player for synchronization */
+  mainVideoRef?: RefObject<HTMLVideoElement>;
+  /** Current playback time in seconds (for external sync control) */
+  currentTime?: number;
 }
 
 /**
@@ -72,7 +76,9 @@ const PreviewLayoutWithCropper = ({
   className = '',
   textStyle,
   subtitleText,
-  compactMode = false
+  compactMode = false,
+  mainVideoRef,
+  currentTime
 }: PreviewLayoutWithCropperProps) => {
   const [template, setTemplate] = useState<TemplateType>(initialTemplate);
   const [normalizedCoordinates, setNormalizedCoordinates] = useState<NormalizedCropCoordinates[]>([]);
@@ -110,6 +116,8 @@ const PreviewLayoutWithCropper = ({
           showFrameBorders={showFrameBorders}
           textStyle={textStyle}
           subtitleText={subtitleText}
+          mainVideoRef={mainVideoRef}
+          currentTime={currentTime}
         />
       </div>
     );
@@ -162,6 +170,8 @@ const PreviewLayoutWithCropper = ({
             showFrameBorders={showFrameBorders}
             textStyle={textStyle}
             subtitleText={subtitleText}
+            mainVideoRef={mainVideoRef}
+            currentTime={currentTime}
           />
         </div>
       </div>

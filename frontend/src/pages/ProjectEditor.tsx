@@ -842,6 +842,8 @@ const ProjectEditor = () => {
                     textStyle={textStyle}
                     subtitleText={selectedMoment.text?.slice(0, 50) || 'Sample subtitle'}
                     compactMode={true}
+                    mainVideoRef={videoRef}
+                    currentTime={currentTime}
                   />
                 </div>
               </div>
