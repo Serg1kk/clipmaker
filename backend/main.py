@@ -1386,10 +1386,36 @@ def build_composite_request(
 
         logger.info(f"Slot {slot_id}: crop norm=({norm_x:.3f}, {norm_y:.3f}, {norm_width:.3f}, {norm_height:.3f})")
 
+        # Convert normalized coordinates (0-1) to pixels
         crop_x = int(norm_x * video_width)
         crop_y = int(norm_y * video_height)
         crop_width = int(norm_width * video_width)
         crop_height = int(norm_height * video_height)
+
+        # Validate and clamp crop coordinates to stay within video bounds
+        # This prevents FFmpeg errors from invalid crop regions
+        crop_x = max(0, min(crop_x, video_width - 1))
+        crop_y = max(0, min(crop_y, video_height - 1))
+
+        # Ensure minimum dimensions of 2 (FFmpeg requires even dimensions)
+        crop_width = max(2, crop_width)
+        crop_height = max(2, crop_height)
+
+        # Clamp width and height to not exceed video bounds
+        if crop_x + crop_width > video_width:
+            crop_width = video_width - crop_x
+        if crop_y + crop_height > video_height:
+            crop_height = video_height - crop_y
+
+        # Ensure even dimensions for codec compatibility
+        crop_width = crop_width - (crop_width % 2)
+        crop_height = crop_height - (crop_height % 2)
+
+        # Final safety check: ensure positive dimensions
+        crop_width = max(2, crop_width)
+        crop_height = max(2, crop_height)
+
+        logger.info(f"Slot {slot_id}: crop pixels=({crop_x}, {crop_y}, {crop_width}x{crop_height})")
 
         # Create source region with crop
         source_region = SourceRegion(

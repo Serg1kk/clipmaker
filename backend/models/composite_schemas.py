@@ -296,6 +296,10 @@ class TemplateSlot(BaseModel):
 
     def get_scale_filter(self, source_width: int, source_height: int) -> str:
         """Generate FFmpeg scale filter based on scale mode."""
+        # Safety check: ensure valid source dimensions
+        source_width = max(2, source_width)
+        source_height = max(2, source_height)
+
         if self.scale_mode == ScaleMode.NONE:
             return ""
         elif self.scale_mode == ScaleMode.STRETCH:
@@ -307,10 +311,11 @@ class TemplateSlot(BaseModel):
             slot_ar = self.aspect_ratio
             if source_ar > slot_ar:
                 # Source is wider, scale by height and crop width
-                return f"scale=-1:{self.height},crop={self.width}:{self.height}"
+                # Use scale2ref or explicit dimensions to avoid issues with small sources
+                return f"scale=-2:{self.height},crop={self.width}:{self.height}"
             else:
                 # Source is taller, scale by width and crop height
-                return f"scale={self.width}:-1,crop={self.width}:{self.height}"
+                return f"scale={self.width}:-2,crop={self.width}:{self.height}"
         return ""
 
 
