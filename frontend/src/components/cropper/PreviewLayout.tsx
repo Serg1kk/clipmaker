@@ -24,8 +24,8 @@ interface PreviewFramePosition {
  * Layout specifications:
  * - 1-frame: Single full-height frame (100% height)
  * - 2-frame: Two frames stacked vertically (50% height each)
- * - 3-frame: Two frames side-by-side on top (40% total height, 50% width each)
- *            plus one frame below (60% height, full width)
+ * - 3-frame: Two small square frames on top for speakers (25% height, 50% width each)
+ *            plus one large wide frame below for screen/presentation (75% height, full width)
  */
 const PREVIEW_LAYOUTS: Record<TemplateType, PreviewFramePosition[]> = {
   '1-frame': [
@@ -36,12 +36,12 @@ const PREVIEW_LAYOUTS: Record<TemplateType, PreviewFramePosition[]> = {
     { x: 0, y: 0.5, width: 1, height: 0.5 }
   ],
   '3-frame': [
-    // Top-left: 50% width, 40% height
-    { x: 0, y: 0, width: 0.5, height: 0.4 },
-    // Top-right: 50% width, 40% height
-    { x: 0.5, y: 0, width: 0.5, height: 0.4 },
-    // Bottom: full width, 60% height
-    { x: 0, y: 0.4, width: 1, height: 0.6 }
+    // Top-left speaker: 50% width, 25% height (nearly square)
+    { x: 0, y: 0, width: 0.5, height: 0.25 },
+    // Top-right speaker: 50% width, 25% height (nearly square)
+    { x: 0.5, y: 0, width: 0.5, height: 0.25 },
+    // Bottom screen/presentation: full width, 75% height
+    { x: 0, y: 0.25, width: 1, height: 0.75 }
   ]
 };
 

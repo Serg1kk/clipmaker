@@ -133,78 +133,81 @@ export interface TemplateRectangleConfig {
 
 /**
  * Get template configuration based on template type
- * Updated to use correct proportions for 9:16 output:
- * - 1-frame: 1080x1920 full (9:16 = 0.5625 aspect ratio)
- * - 2-frame: Two 1080x960 frames stacked vertically (9:8 = 1.125 each)
- * - 3-frame: Top row two 540x768 (40%), bottom 1080x1152 (60%)
+ *
+ * SMALL, non-overlapping crop areas for each template:
+ * - 1-frame: 9:16 vertical, 25% width, centered
+ * - 2-frame: 9:8 aspect ratio, 20% width each, positioned at 15% and 65%
+ * - 3-frame: Two 1:1 squares (15% width) top corners, one 16:9 wide (30% width) bottom center
  */
 export function getTemplateConfig(template: TemplateType): TemplateRectangleConfig {
   const templateConfig = TEMPLATE_CONFIGS[template];
 
   switch (template) {
     case '1-frame':
-      // Full screen 9:16 crop - centered with proper aspect ratio
+      // Single frame: 9:16 vertical, 25% of video width, centered
       return {
         count: 1,
         defaultPositions: [
           {
-            x: 0.1,
+            x: 0.375, // Centered: (1 - 0.25) / 2
             y: 0.05,
-            width: 0.8,
-            height: 0.9,
-            aspectRatio: templateConfig.frames[0].aspectRatio, // 9:16 = 0.5625
+            width: 0.25,
+            height: 0.9, // Will be clamped based on source aspect ratio
+            aspectRatio: 9 / 16, // 0.5625 - vertical
           },
         ],
       };
     case '2-frame':
-      // Two vertically stacked crops, each with 9:8 aspect ratio
-      // Position them to capture different parts of source video
+      // Two frames: 9:8 aspect ratio, 20% width each, non-overlapping
+      // Frame 1 at x=15% (left), Frame 2 at x=65% (right)
       return {
         count: 2,
         defaultPositions: [
           {
-            x: 0.1,
-            y: 0.05,
-            width: 0.8,
-            height: 0.42,
-            aspectRatio: templateConfig.frames[0].aspectRatio, // 9:8 = 1.125
+            x: 0.15, // Left side
+            y: 0.25, // Vertically centered-ish
+            width: 0.20,
+            height: 0.32, // Approximate for 9:8 ratio on 16:9 source
+            aspectRatio: 9 / 8, // 1.125
           },
           {
-            x: 0.1,
-            y: 0.53,
-            width: 0.8,
-            height: 0.42,
-            aspectRatio: templateConfig.frames[1].aspectRatio, // 9:8 = 1.125
+            x: 0.65, // Right side
+            y: 0.25, // Vertically centered-ish
+            width: 0.20,
+            height: 0.32, // Approximate for 9:8 ratio on 16:9 source
+            aspectRatio: 9 / 8, // 1.125
           },
         ],
       };
     case '3-frame':
-      // Two small frames on top (40% height), one large below (60%)
-      // Top frames: 540x768 each (aspect ~0.703)
-      // Bottom frame: 1080x1152 (aspect 0.9375)
+      // Three frames: Two 1:1 squares on top, one 16:9 wide on bottom
+      // All small and non-overlapping
       return {
         count: 3,
         defaultPositions: [
           {
+            // Top-left speaker - square
             x: 0.05,
             y: 0.05,
-            width: 0.4,
-            height: 0.35,
-            aspectRatio: templateConfig.frames[0].aspectRatio, // ~0.703
+            width: 0.15,
+            height: 0.27, // Square adjusted for 16:9 source
+            aspectRatio: 1, // 1:1 square
           },
           {
-            x: 0.55,
+            // Top-right speaker - square
+            x: 0.80,
             y: 0.05,
-            width: 0.4,
-            height: 0.35,
-            aspectRatio: templateConfig.frames[1].aspectRatio, // ~0.703
+            width: 0.15,
+            height: 0.27, // Square adjusted for 16:9 source
+            aspectRatio: 1, // 1:1 square
           },
           {
-            x: 0.1,
-            y: 0.45,
-            width: 0.8,
-            height: 0.5,
-            aspectRatio: templateConfig.frames[2].aspectRatio, // 0.9375
+            // Bottom screen - 16:9 wide horizontal
+            x: 0.35, // Centered: (1 - 0.30) / 2
+            y: 0.55,
+            width: 0.30,
+            height: 0.30, // 16:9 ratio on 16:9 source
+            aspectRatio: 16 / 9, // 1.778
           },
         ],
       };
@@ -212,7 +215,7 @@ export function getTemplateConfig(template: TemplateType): TemplateRectangleConf
       return {
         count: 1,
         defaultPositions: [
-          { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+          { x: 0.375, y: 0.05, width: 0.25, height: 0.9 },
         ],
       };
   }

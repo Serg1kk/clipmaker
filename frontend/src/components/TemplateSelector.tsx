@@ -165,7 +165,7 @@ const TemplateSelector = ({
       aria-label="Select video template layout"
       data-testid="template-selector"
     >
-      <div className="flex gap-2">
+      <div className="flex gap-2 justify-center">
         {TEMPLATES.map((template) => {
           const isSelected = selectedTemplate === template.id;
           const IconComponent = TEMPLATE_ICONS[template.id];
@@ -192,8 +192,8 @@ const TemplateSelector = ({
               data-testid={`template-button-${template.id}`}
               data-selected={isSelected ? 'true' : 'false'}
             >
-              {/* Icon */}
-              <IconComponent className="w-10 h-8 mb-1" />
+              {/* Icon - vertical 9:16 format */}
+              <IconComponent className="w-6 h-10 mb-1" />
 
               {/* Label */}
               <span className="text-xs font-medium whitespace-nowrap">

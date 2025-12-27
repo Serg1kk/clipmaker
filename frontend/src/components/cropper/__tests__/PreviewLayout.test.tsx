@@ -161,12 +161,12 @@ describe('PreviewLayout', () => {
       expect(frame2).toHaveStyle({ top: `${halfHeight}px` });
     });
 
-    it('positions 3-frame with 2 top side-by-side (40%) + 1 bottom (60%)', () => {
+    it('positions 3-frame with 2 top side-by-side (25%) + 1 bottom (75%)', () => {
       const width = 270;
       const height = Math.round(width * (16 / 9));
       const halfWidth = width * 0.5;
-      const topHeight = height * 0.4;
-      const bottomHeight = height * 0.6;
+      const topHeight = height * 0.25; // 25% for speaker frames
+      const bottomHeight = height * 0.75; // 75% for presentation/screen frame
 
       const threeCoords: NormalizedCropCoordinates[] = [
         { id: 'crop-1', x: 0.1, y: 0.1, width: 0.4, height: 0.8 },
@@ -187,7 +187,7 @@ describe('PreviewLayout', () => {
       const frame2 = screen.getByTestId('preview-frame-1');
       const frame3 = screen.getByTestId('preview-frame-2');
 
-      // Top-left frame: 0,0 with 50% width, 40% height
+      // Top-left speaker frame: 0,0 with 50% width, 25% height
       expect(frame1).toHaveStyle({
         left: '0px',
         top: '0px',
@@ -195,7 +195,7 @@ describe('PreviewLayout', () => {
         height: `${topHeight}px`
       });
 
-      // Top-right frame: 50% left, 0 top with 50% width, 40% height
+      // Top-right speaker frame: 50% left, 0 top with 50% width, 25% height
       expect(frame2).toHaveStyle({
         left: `${halfWidth}px`,
         top: '0px',
@@ -203,7 +203,7 @@ describe('PreviewLayout', () => {
         height: `${topHeight}px`
       });
 
-      // Bottom frame: 0 left, 40% top with 100% width, 60% height
+      // Bottom screen frame: 0 left, 25% top with 100% width, 75% height
       expect(frame3).toHaveStyle({
         left: '0px',
         top: `${topHeight}px`,

@@ -30,13 +30,17 @@ describe('getTemplateConfig', () => {
       expect(pos.height).toBeLessThanOrEqual(1);
     });
 
-    it('returns centered large rectangle', () => {
+    it('returns small centered 9:16 vertical rectangle', () => {
       const config = getTemplateConfig('1-frame');
       const pos = config.defaultPositions[0];
 
-      // Should take up most of the frame
-      expect(pos.width).toBeGreaterThanOrEqual(0.7);
-      expect(pos.height).toBeGreaterThanOrEqual(0.7);
+      // Should be a small crop area (~25% width) that user can drag
+      expect(pos.width).toBeGreaterThanOrEqual(0.2);
+      expect(pos.width).toBeLessThanOrEqual(0.35);
+      // Should have 9:16 vertical aspect ratio (0.5625)
+      expect(pos.aspectRatio).toBeCloseTo(9 / 16, 2);
+      // Should be horizontally centered
+      expect(pos.x).toBeCloseTo((1 - pos.width) / 2, 1);
     });
   });
 
@@ -68,6 +72,23 @@ describe('getTemplateConfig', () => {
       // Left rectangle right edge should be before right rectangle left edge
       expect(left.x + left.width).toBeLessThanOrEqual(right.x);
     });
+
+    it('frames have 9:8 aspect ratio and small size', () => {
+      const config = getTemplateConfig('2-frame');
+      const [left, right] = config.defaultPositions;
+
+      // Should be small crop areas (~20% width) that user can drag
+      expect(left.width).toBeGreaterThanOrEqual(0.15);
+      expect(left.width).toBeLessThanOrEqual(0.25);
+      expect(right.width).toBeGreaterThanOrEqual(0.15);
+      expect(right.width).toBeLessThanOrEqual(0.25);
+      // Should have 9:8 aspect ratio (1.125)
+      expect(left.aspectRatio).toBeCloseTo(9 / 8, 2);
+      expect(right.aspectRatio).toBeCloseTo(9 / 8, 2);
+      // Frame 1 at ~15% from left, Frame 2 at ~65% from left
+      expect(left.x).toBeCloseTo(0.15, 1);
+      expect(right.x).toBeCloseTo(0.65, 1);
+    });
   });
 
   describe('3-frame template', () => {
@@ -81,28 +102,51 @@ describe('getTemplateConfig', () => {
       expect(config.defaultPositions).toHaveLength(3);
     });
 
-    it('positions rectangles in order left to right', () => {
+    it('positions top speakers left and right, screen below', () => {
       const config = getTemplateConfig('3-frame');
-      const [first, second, third] = config.defaultPositions;
+      const [topLeft, topRight, bottom] = config.defaultPositions;
 
-      expect(first.x).toBeLessThan(second.x);
-      expect(second.x).toBeLessThan(third.x);
+      // Top-left speaker is on the left
+      expect(topLeft.x).toBeLessThan(topRight.x);
+      // Bottom screen is horizontally centered
+      expect(bottom.x).toBeGreaterThan(0);
+      expect(bottom.x + bottom.width).toBeLessThan(1);
     });
 
     it('positions do not overlap', () => {
       const config = getTemplateConfig('3-frame');
-      const [first, second, third] = config.defaultPositions;
+      const [topLeft, topRight, bottom] = config.defaultPositions;
 
-      expect(first.x + first.width).toBeLessThanOrEqual(second.x);
-      expect(second.x + second.width).toBeLessThanOrEqual(third.x);
+      // Top frames don't overlap horizontally
+      expect(topLeft.x + topLeft.width).toBeLessThanOrEqual(topRight.x);
+      // Bottom frame is below top frames (no vertical overlap)
+      expect(topLeft.y + topLeft.height).toBeLessThanOrEqual(bottom.y);
+      expect(topRight.y + topRight.height).toBeLessThanOrEqual(bottom.y);
     });
 
-    it('all positions have same height', () => {
+    it('top speaker frames have same height, bottom frame is larger', () => {
       const config = getTemplateConfig('3-frame');
-      const heights = config.defaultPositions.map(p => p.height);
+      const [topLeft, topRight, bottom] = config.defaultPositions;
 
-      expect(heights[0]).toBe(heights[1]);
-      expect(heights[1]).toBe(heights[2]);
+      // Top frames have same height (speakers)
+      expect(topLeft.height).toBe(topRight.height);
+      // Bottom frame is larger (screen/presentation)
+      expect(bottom.width).toBeGreaterThan(topLeft.width);
+    });
+
+    it('frames have correct aspect ratios and small sizes', () => {
+      const config = getTemplateConfig('3-frame');
+      const [topLeft, topRight, bottom] = config.defaultPositions;
+
+      // Speaker frames should be small (~15% width) and square (1:1)
+      expect(topLeft.width).toBeGreaterThanOrEqual(0.12);
+      expect(topLeft.width).toBeLessThanOrEqual(0.20);
+      expect(topLeft.aspectRatio).toBeCloseTo(1, 1);
+      expect(topRight.aspectRatio).toBeCloseTo(1, 1);
+      // Screen frame should be wider (~30% width) and 16:9
+      expect(bottom.width).toBeGreaterThanOrEqual(0.25);
+      expect(bottom.width).toBeLessThanOrEqual(0.35);
+      expect(bottom.aspectRatio).toBeCloseTo(16 / 9, 2);
     });
   });
 

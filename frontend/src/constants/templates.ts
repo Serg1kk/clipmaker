@@ -103,14 +103,14 @@ export const TEMPLATE_2_FRAME: TemplateFrameConfig = {
 };
 
 /**
- * 3-Frame Template: Two small frames on top, one large below
- * - Top row: Two 540x768 frames (40% of height, 9:12.8 = ~0.703 aspect ratio)
- * - Bottom: One 1080x1152 frame (60% of height, 9:9.6 = 0.9375 aspect ratio)
+ * 3-Frame Template: Two small square-ish frames on top (speakers), one large wide below (screen)
+ * - Top row: Two ~540x480 frames (25% of height, nearly 1:1 aspect ratio for speaker heads)
+ * - Bottom: One 1080x1440 frame (75% of height, wide for screen/presentation content)
  */
 export const TEMPLATE_3_FRAME: TemplateFrameConfig = {
   id: '3-frame',
   label: 'Three Frames',
-  description: 'Two small frames on top, one large below',
+  description: 'Two speaker frames on top, presentation below',
   frameCount: 3,
   frames: [
     {
@@ -118,24 +118,24 @@ export const TEMPLATE_3_FRAME: TemplateFrameConfig = {
       x: 0,
       y: 0,
       width: 540,
-      height: 768,
-      aspectRatio: 540 / 768, // ~0.703
+      height: 480,
+      aspectRatio: 540 / 480, // 1.125 - nearly square for speaker
     },
     {
       id: 'frame-2',
       x: 540,
       y: 0,
       width: 540,
-      height: 768,
-      aspectRatio: 540 / 768, // ~0.703
+      height: 480,
+      aspectRatio: 540 / 480, // 1.125 - nearly square for speaker
     },
     {
       id: 'frame-3',
       x: 0,
-      y: 768,
+      y: 480,
       width: 1080,
-      height: 1152,
-      aspectRatio: 1080 / 1152, // 0.9375
+      height: 1440,
+      aspectRatio: 1080 / 1440, // 0.75 - wide horizontal for screen content
     },
   ],
 };
@@ -182,10 +182,12 @@ export interface NormalizedCropArea {
 /**
  * Generate default crop areas based on template and source video dimensions
  *
- * Strategy:
- * 1. Calculate the aspect ratio each frame needs from the source
- * 2. Position crop areas to cover different regions of the source video
- * 3. Ensure crops maintain the target aspect ratio
+ * Strategy: Create SMALL, non-overlapping crop areas that maintain proper aspect ratios.
+ * Users should only need to drag to position, not resize extensively.
+ *
+ * Template 1 (Single Frame): 9:16 vertical, ~25% of video width, centered
+ * Template 2 (Two Frames): 9:8 aspect ratio, ~20% width each, positioned left/right
+ * Template 3 (Three Frames): Two 1:1 squares (15% width) top, one 16:9 wide (30% width) bottom
  *
  * @param templateType - Template type
  * @param sourceWidth - Source video width
@@ -200,73 +202,98 @@ export function generateDefaultCropAreas(
   const template = TEMPLATE_CONFIGS[templateType];
   const sourceAspectRatio = sourceWidth / sourceHeight;
 
-  return template.frames.map((frame, index) => {
-    const targetAspectRatio = frame.aspectRatio;
+  if (templateType === '1-frame') {
+    // Single frame: 9:16 vertical aspect ratio, 25% of source width, centered
+    const targetAspectRatio = 9 / 16; // 0.5625 - vertical
+    const normalizedWidth = 0.25;
+    // Height calculated from width and aspect ratio, adjusted for source aspect ratio
+    const normalizedHeight = (normalizedWidth * sourceAspectRatio) / targetAspectRatio;
+    const clampedHeight = Math.min(normalizedHeight, 0.9); // Don't exceed 90% of height
 
-    // Calculate crop dimensions to match target aspect ratio
-    let cropWidth: number;
-    let cropHeight: number;
-
-    if (sourceAspectRatio > targetAspectRatio) {
-      // Source is wider than target - limit by height
-      cropHeight = sourceHeight;
-      cropWidth = cropHeight * targetAspectRatio;
-    } else {
-      // Source is taller than target - limit by width
-      cropWidth = sourceWidth;
-      cropHeight = cropWidth / targetAspectRatio;
-    }
-
-    // Normalize dimensions
-    const normalizedWidth = cropWidth / sourceWidth;
-    const normalizedHeight = cropHeight / sourceHeight;
-
-    // Calculate positions based on template layout
-    let normalizedX: number;
-    let normalizedY: number;
-
-    if (templateType === '1-frame') {
-      // Center the single crop
-      normalizedX = (1 - normalizedWidth) / 2;
-      normalizedY = (1 - normalizedHeight) / 2;
-    } else if (templateType === '2-frame') {
-      // Stack vertically - offset each crop slightly to show different regions
-      normalizedX = (1 - normalizedWidth) / 2;
-      if (index === 0) {
-        normalizedY = Math.max(0, (1 - normalizedHeight) / 4);
-      } else {
-        normalizedY = Math.min(1 - normalizedHeight, 1 - (1 - normalizedHeight) / 4 - normalizedHeight);
-      }
-    } else {
-      // 3-frame layout
-      if (index === 0) {
-        // Top-left
-        normalizedX = Math.max(0, (1 - normalizedWidth) / 4);
-        normalizedY = Math.max(0, (1 - normalizedHeight) / 4);
-      } else if (index === 1) {
-        // Top-right
-        normalizedX = Math.min(1 - normalizedWidth, 1 - (1 - normalizedWidth) / 4 - normalizedWidth);
-        normalizedY = Math.max(0, (1 - normalizedHeight) / 4);
-      } else {
-        // Bottom full width
-        normalizedX = (1 - normalizedWidth) / 2;
-        normalizedY = Math.min(1 - normalizedHeight, 1 - (1 - normalizedHeight) / 4 - normalizedHeight);
-      }
-    }
-
-    // Ensure values are clamped to valid range
-    normalizedX = Math.max(0, Math.min(1 - normalizedWidth, normalizedX));
-    normalizedY = Math.max(0, Math.min(1 - normalizedHeight, normalizedY));
-
-    return {
-      id: frame.id,
-      x: normalizedX,
-      y: normalizedY,
+    return [{
+      id: template.frames[0].id,
+      x: (1 - normalizedWidth) / 2, // Centered horizontally
+      y: (1 - clampedHeight) / 2,   // Centered vertically
       width: normalizedWidth,
-      height: normalizedHeight,
+      height: clampedHeight,
       targetAspectRatio,
-    };
-  });
+    }];
+  }
+
+  if (templateType === '2-frame') {
+    // Two frames: 9:8 aspect ratio (1.125), 20% width each
+    // Frame 1 at x=15%, Frame 2 at x=65%, both vertically centered
+    const targetAspectRatio = 9 / 8; // 1.125 - slightly wider than tall
+    const normalizedWidth = 0.20;
+    // Height = width / aspectRatio * sourceAspectRatio (convert to normalized height)
+    const normalizedHeight = (normalizedWidth / targetAspectRatio) * sourceAspectRatio;
+    const clampedHeight = Math.min(normalizedHeight, 0.5); // Max 50% of height
+
+    return [
+      {
+        id: template.frames[0].id,
+        x: 0.15, // Left side
+        y: (1 - clampedHeight) / 2, // Vertically centered
+        width: normalizedWidth,
+        height: clampedHeight,
+        targetAspectRatio,
+      },
+      {
+        id: template.frames[1].id,
+        x: 0.65, // Right side
+        y: (1 - clampedHeight) / 2, // Vertically centered
+        width: normalizedWidth,
+        height: clampedHeight,
+        targetAspectRatio,
+      },
+    ];
+  }
+
+  // Template 3: Three frames
+  // Frame 1 & 2: 1:1 square (15% width), top-left and top-right
+  // Frame 3: 16:9 wide (30% width), bottom-center
+  const speakerAspectRatio = 1; // Square
+  const screenAspectRatio = 16 / 9; // Wide horizontal
+
+  const speakerWidth = 0.15;
+  // For square: height = width * sourceAspectRatio
+  const speakerHeight = speakerWidth * sourceAspectRatio;
+  const clampedSpeakerHeight = Math.min(speakerHeight, 0.35); // Max 35% height
+
+  const screenWidth = 0.30;
+  // For 16:9: height = width / aspectRatio * sourceAspectRatio
+  const screenHeight = (screenWidth / screenAspectRatio) * sourceAspectRatio;
+  const clampedScreenHeight = Math.min(screenHeight, 0.4); // Max 40% height
+
+  return [
+    {
+      // Top-left speaker (square)
+      id: template.frames[0].id,
+      x: 0.05,
+      y: 0.05,
+      width: speakerWidth,
+      height: clampedSpeakerHeight,
+      targetAspectRatio: speakerAspectRatio,
+    },
+    {
+      // Top-right speaker (square)
+      id: template.frames[1].id,
+      x: 0.80, // Right side with some margin
+      y: 0.05,
+      width: speakerWidth,
+      height: clampedSpeakerHeight,
+      targetAspectRatio: speakerAspectRatio,
+    },
+    {
+      // Bottom screen (16:9 wide)
+      id: template.frames[2].id,
+      x: (1 - screenWidth) / 2, // Centered horizontally
+      y: 0.55, // Lower half
+      width: screenWidth,
+      height: clampedScreenHeight,
+      targetAspectRatio: screenAspectRatio,
+    },
+  ];
 }
 
 /**
