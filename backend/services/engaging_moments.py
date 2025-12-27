@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -194,6 +195,57 @@ def _get_transcript_duration(transcript_json: dict[str, Any]) -> float:
     return max(seg.get("end", 0) for seg in segments)
 
 
+def _extract_json_from_response(response_text: str) -> str:
+    """
+    Extract JSON from Gemini response, handling various formats.
+
+    Gemini often wraps JSON in markdown code blocks or adds explanatory text.
+    This function extracts the actual JSON object.
+
+    Args:
+        response_text: Raw response from Gemini
+
+    Returns:
+        Extracted JSON string
+    """
+    text = response_text.strip()
+
+    # Try 1: Extract from markdown code block (```json ... ``` or ``` ... ```)
+    code_block_pattern = r'```(?:json)?\s*(\{[\s\S]*?\})\s*```'
+    match = re.search(code_block_pattern, text)
+    if match:
+        return match.group(1)
+
+    # Try 2: Find JSON object anywhere in the text using brace matching
+    # Find first { and match to last }
+    start_idx = text.find('{')
+    if start_idx != -1:
+        # Find matching closing brace
+        brace_count = 0
+        end_idx = start_idx
+        for i, char in enumerate(text[start_idx:], start=start_idx):
+            if char == '{':
+                brace_count += 1
+            elif char == '}':
+                brace_count -= 1
+                if brace_count == 0:
+                    end_idx = i
+                    break
+
+        if end_idx > start_idx:
+            return text[start_idx:end_idx + 1]
+
+    # Try 3: Return cleaned text as-is (original behavior)
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+
+    return text.strip()
+
+
 def _parse_gemini_response(
     response_text: str,
     transcript_json: dict[str, Any]
@@ -209,17 +261,12 @@ def _parse_gemini_response(
         List of validated EngagingMoment objects
     """
     try:
-        # Clean up response - sometimes LLMs add markdown code blocks
-        cleaned = response_text.strip()
-        if cleaned.startswith("```json"):
-            cleaned = cleaned[7:]
-        if cleaned.startswith("```"):
-            cleaned = cleaned[3:]
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3]
-        cleaned = cleaned.strip()
+        # Extract JSON from response (handles markdown blocks, explanatory text, etc.)
+        json_str = _extract_json_from_response(response_text)
 
-        data = json.loads(cleaned)
+        logger.debug(f"Extracted JSON string (first 500 chars): {json_str[:500]}")
+
+        data = json.loads(json_str)
         moments_data = data.get("moments", [])
 
         moments = []
@@ -251,10 +298,11 @@ def _parse_gemini_response(
 
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse Gemini response as JSON: {e}")
-        logger.debug(f"Raw response: {response_text}")
+        logger.error(f"Raw response (first 1000 chars): {response_text[:1000]}")
         return []
     except Exception as e:
         logger.error(f"Error parsing Gemini response: {e}")
+        logger.error(f"Raw response (first 1000 chars): {response_text[:1000]}")
         return []
 
 
