@@ -278,7 +278,7 @@ async def process_transcription(job_id: str) -> None:
                 asyncio.create_task(tracker.update_progress(
                     stage=ProgressStage.EXTRACTING,
                     progress=mapped_progress,
-                    message=f"Extracting audio... {progress.percent:.0f}%",
+                    message="Extracting audio from video...",
                     current_step=1,
                     eta_seconds=int(progress.eta_seconds) if progress.eta_seconds else None,
                 ))
@@ -1535,8 +1535,12 @@ async def websocket_job_progress(websocket: WebSocket, job_id: str):
         - Pong responses: {"type": "pong"}
         - Ping requests: {"type": "ping"} (server responds with pong)
     """
-    # Validate job exists (optional - can also allow subscription to future jobs)
+    # Check transcription jobs store
     job = jobs_store.get(job_id)
+
+    # Also check moments jobs store (from projects router)
+    from routers.projects import moments_jobs_store
+    moments_job = moments_jobs_store.get(job_id)
 
     # Connect to the job's progress channel
     connected = await connection_manager.connect_to_job(websocket, job_id)
@@ -1545,23 +1549,43 @@ async def websocket_job_progress(websocket: WebSocket, job_id: str):
         return
 
     try:
-        # Send initial status if job exists
+        # Send initial status if transcription job exists
         if job:
+            # Map job status to stage for frontend consistency
+            stage_map = {
+                "pending": "starting",
+                "processing": "transcribing",
+                "completed": "completed",
+                "failed": "failed",
+            }
+            stage = stage_map.get(job.status.value, "processing")
             initial_message = {
-                "type": "initial_status",
+                "type": "progress",
                 "job_id": job.job_id,
-                "status": job.status.value,
+                "stage": stage,
                 "progress": job.progress,
-                "message": f"Connected to job {job_id}",
+                "message": job.message if hasattr(job, 'message') else f"Processing...",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
             }
             await websocket.send_json(initial_message)
-        else:
-            # Job doesn't exist yet, send waiting message
+        # Send initial status if moments job exists
+        elif moments_job:
             await websocket.send_json({
-                "type": "waiting",
+                "type": "moments_progress",
                 "job_id": job_id,
-                "message": "Waiting for job to start...",
+                "stage": moments_job.get("status", "pending"),
+                "progress": 0.0,
+                "message": moments_job.get("message", "Starting AI analysis..."),
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            })
+        else:
+            # Job doesn't exist yet, send waiting message with progress format
+            await websocket.send_json({
+                "type": "progress",
+                "job_id": job_id,
+                "stage": "starting",
+                "progress": 0.0,
+                "message": "Initializing...",
                 "timestamp": datetime.utcnow().isoformat() + "Z",
             })
 
