@@ -140,10 +140,18 @@ Whisper is OpenAI's speech recognition neural network. It runs **completely loca
 
 ### Create Virtual Environment
 
+> 📍 **Current location:** Project root `clipmaker/`
+
 ```bash
 # Navigate to backend folder
 cd backend
 
+# Now you're in: clipmaker/backend/
+```
+
+> 📍 **Current location:** `clipmaker/backend/`
+
+```bash
 # Create virtual environment
 python3 -m venv venv
 
@@ -153,12 +161,14 @@ source venv/bin/activate
 # Windows:
 # .\venv\Scripts\activate
 
-# Verify activation
+# Verify activation (you'll see "(venv)" at the start of your prompt)
 which python
-# Should show: /path/to/clipmaker/backend/venv/bin/python
+# Should show: .../clipmaker/backend/venv/bin/python
 ```
 
 ### Install Dependencies
+
+> 📍 **Current location:** `clipmaker/backend/` with active venv (prompt starts with `(venv)`)
 
 ```bash
 # Upgrade pip
@@ -174,6 +184,8 @@ pip install -r requirements.txt
 
 On first use, Whisper will automatically download the model:
 
+> 📍 **Current location:** `clipmaker/backend/` with active venv
+
 ```bash
 # Test run to download the model
 python -c "import whisper; whisper.load_model('base')"
@@ -185,51 +197,55 @@ Model is saved to `~/.cache/whisper/` (~150MB for base)
 
 ## 5. Video Folder Configuration
 
-You have **3 options** for organizing your video files:
+> ⚠️ **Important:** The `videos/` folder already exists in the repository after cloning! You don't need to create it.
 
-### Option A: Project Folder (Recommended for Starting)
+> 📍 **Current location:** `clipmaker/backend/` — need to return to project root
 
 ```bash
-# Create videos folder in project
-mkdir -p videos
+# Return to project root
+cd ..
 
-# Copy a test video
+# Now you're in: clipmaker/
+```
+
+### Check videos folder
+
+> 📍 **Current location:** Project root `clipmaker/`
+
+```bash
+# The videos folder already exists, just verify
+ls -la videos/
+
+# If empty - add a test video
 cp ~/Downloads/test-video.mp4 videos/
 ```
 
-**Pros:** Everything in one place, easy to backup
-**Cons:** Videos take space in project folder
+### Alternative Options (optional)
 
-### Option B: System Videos Folder
+If you want to use a different folder for videos:
+
+#### Option B: System Videos Folder
 
 ```bash
 # Create folder if it doesn't exist
 mkdir -p ~/Videos/clipmaker-source
 
-# In .env, specify the path
+# In .env, specify the path (see section 6)
 VIDEO_SOURCE_PATH=~/Videos/clipmaker-source
 ```
 
-**Pros:** Videos separate from code, doesn't affect git
-**Cons:** Need to remember file locations
-
-### Option C: Symlink to Any Folder
+#### Option C: Symlink to Existing Folder
 
 ```bash
-# Create symbolic link to existing video folder
-ln -s /Volumes/ExternalDrive/MyVideos ./videos
-
-# Or link to iCloud/Dropbox folder
-ln -s ~/Library/Mobile\ Documents/com~apple~CloudDocs/Videos ./videos
+# Remove empty videos folder and create link to your folder
+rm -rf videos
+ln -s /path/to/your/videos ./videos
 ```
-
-**Pros:** Use your existing folder structure
-**Cons:** Need to ensure drive is available
 
 ### Verify Access
 
 ```bash
-# Check that folder exists and contains videos
+# Check that folder contains videos
 ls -la videos/
 
 # Should show your video files
@@ -242,10 +258,10 @@ ls -la videos/
 
 ### Create Configuration File
 
-```bash
-# Navigate to project root
-cd ..  # exit backend folder to project root
+> 📍 **Current location:** Project root `clipmaker/` (after section 5)
 
+```bash
+# Create .env file in project root
 cat > .env << 'EOF'
 # ============================================
 # API Keys
@@ -297,9 +313,13 @@ EOF
 
 ## 7. Frontend Setup
 
+> 📍 **Current location:** Project root `clipmaker/`
+
 ```bash
 # Navigate to frontend folder
 cd frontend
+
+# Now you're in: clipmaker/frontend/
 
 # Install dependencies
 npm install
@@ -307,25 +327,36 @@ npm install
 
 **Installation time:** ~2-3 minutes
 
+> 📍 **After installation:** Stay in `clipmaker/frontend/` — we'll start the frontend from here soon
+
 ---
 
 ## 8. Running the Application
 
-### Start Backend (Terminal 1)
+> 🖥️ **You'll need 2 terminals** — one for backend, one for frontend. They run in parallel.
+
+---
+
+### 🖥️ TERMINAL 1: Start Backend
+
+> Open **first terminal** (or use the current one)
 
 ```bash
-# Make sure you're in project root
-cd /path/to/clipmaker
+# 1. Navigate to project root (replace with your path)
+cd ~/Projects/clipmaker
 
-# Activate virtual environment
+# 2. Activate Python virtual environment
 source backend/venv/bin/activate
+# You'll see (venv) at the start of your prompt
 
-# Navigate to backend
+# 3. Navigate to backend folder
 cd backend
 
-# Start the server
+# 4. Start the server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+> 📍 **Result:** Terminal 1 is in `clipmaker/backend/` running uvicorn
 
 You should see:
 ```
@@ -335,15 +366,23 @@ INFO:     Started server process [12346]
 INFO:     Application startup complete.
 ```
 
-### Start Frontend (Terminal 2)
+> ⚠️ **Don't close this terminal!** The server must keep running.
+
+---
+
+### 🖥️ TERMINAL 2: Start Frontend
+
+> Open **second terminal** (Cmd+T on macOS or new tab)
 
 ```bash
-# In a new terminal
-cd /path/to/clipmaker/frontend
+# 1. Navigate directly to frontend folder (replace with your path)
+cd ~/Projects/clipmaker/frontend
 
-# Start dev server
+# 2. Start dev server
 npm run dev
 ```
+
+> 📍 **Result:** Terminal 2 is in `clipmaker/frontend/` running Vite
 
 You should see:
 ```
@@ -351,6 +390,30 @@ You should see:
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.1.100:5173/
+```
+
+> ⚠️ **Don't close this terminal!** The frontend server must keep running.
+
+---
+
+### How It Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       YOUR COMPUTER                          │
+├─────────────────────────────┬───────────────────────────────┤
+│       🖥️ TERMINAL 1         │       🖥️ TERMINAL 2           │
+│                             │                               │
+│  clipmaker/backend/         │  clipmaker/frontend/          │
+│  (venv) active              │                               │
+│                             │                               │
+│  uvicorn main:app --reload  │  npm run dev                  │
+│  ↓                          │  ↓                            │
+│  Backend API :8000          │  Frontend :5173               │
+└─────────────────────────────┴───────────────────────────────┘
+                              │
+                              ▼
+                    🌐 Browser: localhost:5173
 ```
 
 ---
@@ -471,23 +534,34 @@ git clone https://github.com/Serg1kk/clipmaker.git && cd clipmaker
 # 2. Install FFmpeg (Mac)
 brew install ffmpeg
 
-# 3. Setup backend
+# 3. Setup backend (create venv, install dependencies)
 cd backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
 
-# 4. Create .env (in project root)
+# 4. Create .env in project root
 cd .. && cp .env.example .env
 # Edit .env - add OPENROUTER_API_KEY
 
-# 5. Create videos folder and add test video
-mkdir -p videos && cp ~/Downloads/test.mp4 videos/
+# 5. Add test video (videos/ folder already exists)
+cp ~/Downloads/test.mp4 videos/
 
-# 6. Start backend (terminal 1)
-cd backend && source venv/bin/activate && uvicorn main:app --reload
+# 6. Install frontend dependencies
+cd frontend && npm install && cd ..
+```
 
-# 7. Start frontend (terminal 2)
-cd frontend && npm install && npm run dev
+### Running (requires 2 terminals!)
 
-# 8. Open http://localhost:5173/
+```bash
+# 🖥️ TERMINAL 1 - Backend
+cd ~/path/to/clipmaker
+source backend/venv/bin/activate
+cd backend
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+# 🖥️ TERMINAL 2 - Frontend (new terminal!)
+cd ~/path/to/clipmaker/frontend
+npm run dev
+
+# 🌐 Open in browser: http://localhost:5173/
 ```
 
 ---
