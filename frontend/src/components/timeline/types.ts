@@ -128,6 +128,7 @@ export function isTimeInRange(time: number, range: TimeRange): boolean {
  * Convert an EngagingMoment from the backend to a TimelineMarker
  */
 export function engagingMomentToMarker(moment: {
+  id?: string;
   start: number;
   end: number;
   reason: string;
@@ -135,7 +136,7 @@ export function engagingMomentToMarker(moment: {
   confidence?: number;
 }, index: number): TimelineMarker {
   return {
-    id: `ai-moment-${index}`,
+    id: moment.id || `ai-moment-${index}`,
     startTime: moment.start,
     endTime: moment.end,
     duration: moment.end - moment.start,

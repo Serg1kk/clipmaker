@@ -155,6 +155,7 @@ const ProjectEditor = () => {
   const timelineMarkers = useMemo((): TimelineMarker[] => {
     if (!project?.moments) return [];
     return project.moments.map((m, i) => engagingMomentToMarker({
+      id: m.id,  // Pass actual backend ID
       start: m.start,
       end: m.end,
       reason: m.reason,
@@ -800,30 +801,22 @@ const ProjectEditor = () => {
                   </div>
                 )}
 
-                {/* Video info and controls */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                {/* Video info */}
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                  </svg>
+                  <span className="truncate flex-1">{project.video_path.split('/').pop()}</span>
+                  <button
+                    onClick={() => setShowVideoPicker(true)}
+                    disabled={saving}
+                    className="text-gray-400 hover:text-white transition-colors"
+                    title="Change video"
+                  >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                     </svg>
-                    <span className="truncate">{project.video_path.split('/').pop()}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowVideoPicker(true)}
-                      disabled={saving}
-                      className="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
-                    >
-                      Change
-                    </button>
-                    <button
-                      onClick={handleClearVideo}
-                      disabled={saving}
-                      className="px-3 py-1.5 text-sm bg-red-600/80 hover:bg-red-600 text-white rounded-lg"
-                    >
-                      Remove
-                    </button>
-                  </div>
+                  </button>
                 </div>
               </div>
             ) : (
