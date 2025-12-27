@@ -915,31 +915,33 @@ async def get_video_file_info(
 @app.get(
     "/video-stream",
     summary="Stream video file",
-    description="Stream a video file for playback in the browser",
+    description="Stream a video file for playback in the browser with Range support",
     tags=["Video Files"],
 )
 async def stream_video(
+    request: Request,
     path: str = Query(
         ...,
         description="Full path to the video file",
     ),
 ):
     """
-    Stream a video file for playback.
+    Stream a video file for playback with HTTP Range support.
 
     This endpoint serves video files with proper streaming support
-    for browser video players.
+    for browser video players, including seek functionality.
 
     Args:
+        request: FastAPI request object (for Range header)
         path: Full path to the video file
 
     Returns:
-        FileResponse with the video content
+        StreamingResponse with Range support for video seeking
 
     Raises:
         HTTPException: 404 if file not found, 400 if invalid file type
     """
-    from fastapi.responses import FileResponse
+    from fastapi.responses import StreamingResponse
     import mimetypes
 
     video_path = Path(path)
@@ -963,10 +965,68 @@ async def stream_video(
     if not mime_type:
         mime_type = "video/mp4"  # Default fallback
 
-    return FileResponse(
-        path=str(video_path),
+    # Get file size
+    file_size = video_path.stat().st_size
+
+    # Parse Range header for partial content requests
+    range_header = request.headers.get("range")
+
+    if range_header:
+        # Parse range like "bytes=0-1023"
+        range_match = range_header.replace("bytes=", "").split("-")
+        start = int(range_match[0]) if range_match[0] else 0
+        end = int(range_match[1]) if range_match[1] else file_size - 1
+
+        # Ensure valid range
+        if start >= file_size:
+            raise HTTPException(status_code=416, detail="Range not satisfiable")
+
+        end = min(end, file_size - 1)
+        content_length = end - start + 1
+
+        async def stream_range():
+            async with aiofiles.open(video_path, "rb") as f:
+                await f.seek(start)
+                remaining = content_length
+                chunk_size = 1024 * 1024  # 1MB chunks
+                while remaining > 0:
+                    chunk = await f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        headers = {
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(content_length),
+            "Content-Disposition": f'inline; filename="{video_path.name}"',
+        }
+
+        return StreamingResponse(
+            stream_range(),
+            status_code=206,
+            media_type=mime_type,
+            headers=headers,
+        )
+
+    # Full file request (no Range header)
+    async def stream_full():
+        async with aiofiles.open(video_path, "rb") as f:
+            chunk_size = 1024 * 1024  # 1MB chunks
+            while chunk := await f.read(chunk_size):
+                yield chunk
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+        "Content-Disposition": f'inline; filename="{video_path.name}"',
+    }
+
+    return StreamingResponse(
+        stream_full(),
         media_type=mime_type,
-        filename=video_path.name,
+        headers=headers,
     )
 
 
