@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Projects from './pages/Projects';
+import ProjectEditor from './pages/ProjectEditor';
 import CropperDemo from './pages/CropperDemo';
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="projects" element={<Projects />} />
+          <Route path="projects/:projectId" element={<ProjectEditor />} />
           <Route path="cropper-demo" element={<CropperDemo />} />
         </Route>
       </Routes>
