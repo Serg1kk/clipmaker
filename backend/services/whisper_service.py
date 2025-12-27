@@ -166,18 +166,18 @@ class WhisperService:
         Detect the best available device for inference.
 
         Returns:
-            Device string ('mps' for Apple Silicon, 'cuda' for NVIDIA, 'cpu' fallback)
+            Device string ('cuda' for NVIDIA, 'cpu' for Apple Silicon and fallback)
         """
-        # Check for Apple Silicon (M1/M2)
-        if platform.system() == "Darwin" and platform.machine() == "arm64":
-            if torch.backends.mps.is_available():
-                logger.info("Apple Silicon detected - using MPS acceleration")
-                return "mps"
-
-        # Check for CUDA
+        # Check for CUDA (NVIDIA GPU)
         if torch.cuda.is_available():
             logger.info(f"CUDA detected - using GPU: {torch.cuda.get_device_name(0)}")
             return "cuda"
+
+        # Apple Silicon: Use CPU instead of MPS
+        # MPS doesn't support float64 which Whisper uses internally
+        if platform.system() == "Darwin" and platform.machine() == "arm64":
+            logger.info("Apple Silicon detected - using CPU (MPS has float64 limitations)")
+            return "cpu"
 
         logger.info("No GPU acceleration available - using CPU")
         return "cpu"
