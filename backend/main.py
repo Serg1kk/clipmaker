@@ -17,6 +17,18 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
+# Load .env file from project root
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"Loaded .env from {env_path}")
+    else:
+        print(f"No .env file found at {env_path}, using defaults")
+except ImportError:
+    print("python-dotenv not installed, using environment variables only")
+
 import aiofiles
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, BackgroundTasks, Query, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
