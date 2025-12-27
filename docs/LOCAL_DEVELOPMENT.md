@@ -1,6 +1,8 @@
 # Local Development Guide
 
-Полное руководство по развёртыванию AI Clips на локальной машине (macOS/Linux).
+> 🌐 **Язык:** [English](LOCAL_DEVELOPMENT_EN.md) | Русский
+
+Полное руководство по развёртыванию Clipmaker на локальной машине (macOS/Linux).
 
 ---
 
@@ -45,16 +47,16 @@
 cd ~/Projects  # или другая папка
 
 # Клонировать репозиторий
-git clone https://github.com/YOUR_USERNAME/ai-clips.git
+git clone https://github.com/Serg1kk/clipmaker.git
 
 # Перейти в папку проекта
-cd ai-clips
+cd clipmaker
 ```
 
 ### Структура проекта после клонирования
 
 ```
-ai-clips/
+clipmaker/
 ├── backend/           # FastAPI сервер + Whisper
 ├── frontend/          # React приложение
 ├── docker/            # Docker конфигурации
@@ -462,7 +464,7 @@ grep OPENROUTER .env
 
 ```bash
 # 1. Клонировать
-git clone https://github.com/YOUR_USERNAME/ai-clips.git && cd ai-clips
+git clone https://github.com/Serg1kk/clipmaker.git && cd clipmaker
 
 # 2. Установить FFmpeg (Mac)
 brew install ffmpeg

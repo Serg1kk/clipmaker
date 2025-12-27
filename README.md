@@ -1,14 +1,17 @@
 # AI Clips - Video Transcription & Clip Generation
 
+> 🌐 **Language:** English | [Русский](README_RU.md)
+
 A full-stack application for transcribing videos, identifying engaging moments using AI, and generating short-form clips with synchronized subtitles.
 
 ## Quick Links
 
 | Guide | Description |
 |-------|-------------|
-| **[Local Development Guide](docs/LOCAL_DEVELOPMENT.md)** | Детальное руководство по локальному развёртыванию |
-| [Usage Guide](docs/USAGE_GUIDE.md) | Как пользоваться приложением |
-| [API Documentation](http://localhost:8000/docs) | Swagger/OpenAPI (после запуска) |
+| **[Local Development](docs/LOCAL_DEVELOPMENT_EN.md)** | Complete local deployment guide |
+| [Local Development (RU)](docs/LOCAL_DEVELOPMENT.md) | Руководство по локальному развёртыванию |
+| [Usage Guide](docs/USAGE_GUIDE.md) | How to use the application |
+| [API Documentation](http://localhost:8000/docs) | Swagger/OpenAPI (after startup) |
 
 ---
 
@@ -43,15 +46,15 @@ A full-stack application for transcribing videos, identifying engaging moments u
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Transcription** | OpenAI Whisper | Speech-to-text с word-level timestamps |
-| **AI Analysis** | Gemini (via OpenRouter) | Поиск engaging moments |
-| **Video Processing** | FFmpeg | Извлечение аудио, рендеринг клипов |
-| **Backend** | FastAPI + Python | REST API, WebSocket прогресс |
-| **Frontend** | React + Vite + TypeScript | UI интерфейс |
+| **Transcription** | OpenAI Whisper | Speech-to-text with word-level timestamps |
+| **AI Analysis** | Gemini (via OpenRouter) | Finding engaging moments |
+| **Video Processing** | FFmpeg | Audio extraction, clip rendering |
+| **Backend** | FastAPI + Python | REST API, WebSocket progress |
+| **Frontend** | React + Vite + TypeScript | User interface |
 
 ### Whisper Models
 
-Whisper работает **полностью локально** на вашем компьютере:
+Whisper runs **completely locally** on your computer:
 
 | Model | Size | Speed* | Quality | Best For |
 |-------|------|--------|---------|----------|
@@ -106,8 +109,8 @@ docker --version  # Should output Docker version 24.x.x or higher
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/ai-clips.git
-cd ai-clips
+git clone https://github.com/Serg1kk/clipmaker.git
+cd clipmaker
 ```
 
 ### 2. Create Environment File
