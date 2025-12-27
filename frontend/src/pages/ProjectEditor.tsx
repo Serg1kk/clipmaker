@@ -810,69 +810,42 @@ const ProjectEditor = () => {
 
       {/* Main layout - changes based on whether moment is selected */}
       {currentStage === 'edit-moments' && selectedMoment ? (
-        /* 50/50 Split Layout when moment is selected */
-        <div className="flex gap-4 h-[calc(100vh-120px)] overflow-y-auto">
-          {/* Left + Center: Video Player and Preview (combined area) */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Top row: 50/50 Video Player and Preview */}
-            <div className="flex gap-4 flex-1 min-h-0 items-start">
-              {/* Left: Video Player with crop overlay (50%) */}
-              <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col min-w-0">
-                <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Source Video
-                </h4>
-                <div className="flex-1 bg-gray-900 rounded-lg overflow-hidden relative flex items-center justify-center min-h-0">
-                  <video
-                    ref={videoRef}
-                    src={getVideoUrl(project.video_path!)}
-                    className="max-w-full max-h-full object-contain"
-                    controls
-                    onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-                    onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
-                  />
-                </div>
-              </div>
-
-              {/* Right: 9:16 Preview (50%) - sticky */}
-              <div
-                className="flex-1 bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col min-w-0"
-                style={{
-                  position: 'sticky',
-                  top: '1rem',
-                  alignSelf: 'flex-start',
-                  maxHeight: 'calc(100vh - 2rem)',
-                }}
-              >
-                <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  9:16 Preview
-                </h4>
-                <div className="flex-1 flex items-center justify-center min-h-0">
-                  <PreviewLayoutWithCropper
-                    src={getVideoUrl(project.video_path!)}
-                    srcType="video"
-                    initialTemplate={cropTemplate}
-                    previewWidth={280}
-                    onTemplateChange={handleTemplateChange}
-                    onNormalizedCropChange={handleCropChange}
-                    textStyle={textStyle}
-                    subtitleText={selectedMoment.text?.slice(0, 50) || 'Sample subtitle'}
-                    compactMode={true}
-                    mainVideoRef={videoRef}
-                    currentTime={currentTime}
-                  />
-                </div>
+        /* New 50/25/25 Grid Layout when moment is selected */
+        <div className="grid h-[calc(100vh-120px)] overflow-hidden" style={{ gridTemplateColumns: '50% 25% 25%' }}>
+          {/* Left Column (50%): Source Video with CropOverlay + Timeline */}
+          <div className="flex flex-col min-h-0 pr-3">
+            {/* Source Video Container with CropOverlay */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col flex-1 min-h-0">
+              <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Source Video
+                <span className="text-xs text-gray-500 ml-auto">Drag frames to adjust crop</span>
+              </h4>
+              <div className="flex-1 bg-gray-900 rounded-lg overflow-hidden relative min-h-0">
+                {/* Video Element */}
+                <video
+                  ref={videoRef}
+                  src={getVideoUrl(project.video_path!)}
+                  className="w-full h-full object-contain"
+                  controls
+                  onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                  onLoadedMetadata={(e) => setVideoDuration(e.currentTarget.duration)}
+                />
+                {/* CropOverlay positioned absolute over video */}
+                <CropOverlay
+                  template={cropTemplate}
+                  initialCoordinates={cropCoordinates}
+                  onNormalizedCropChange={handleCropChange}
+                  className="pointer-events-auto"
+                />
               </div>
             </div>
 
-            {/* Timeline - below video area */}
+            {/* Timeline with markers - below video */}
             {timelineMarkers.length > 0 && (
-              <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3">
+              <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3 flex-shrink-0">
                 <VideoTimeline
                   duration={videoDuration}
                   currentTime={currentTime}
@@ -887,41 +860,86 @@ const ProjectEditor = () => {
                 />
               </div>
             )}
+          </div>
 
-            {/* Settings row: Template selector and Text styling */}
-            <div className="mt-3 grid grid-cols-2 gap-4">
-              {/* Template Selector */}
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-3">
-                <h4 className="text-sm font-medium text-gray-300 mb-2">Crop Template</h4>
-                <div className="flex gap-2">
-                  {(['1-frame', '2-frame', '3-frame'] as TemplateType[]).map((template) => (
-                    <button
-                      key={template}
-                      onClick={() => handleTemplateChange(template)}
-                      className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        cropTemplate === template
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
-                    >
-                      {template === '1-frame' ? '1' : template === '2-frame' ? '2' : '3'}
-                    </button>
-                  ))}
-                </div>
+          {/* Center Column (25%): Templates + Preview */}
+          <div className="flex flex-col min-h-0 px-2 overflow-y-auto">
+            {/* Vertical Template Selector with 9:16 icons */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
+              <h4 className="text-sm font-medium text-gray-300 mb-3">Template</h4>
+              <div className="flex flex-col gap-2">
+                {(['1-frame', '2-frame', '3-frame'] as TemplateType[]).map((template) => (
+                  <button
+                    key={template}
+                    onClick={() => handleTemplateChange(template)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                      cropTemplate === template
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    {/* 9:16 Frame Icon */}
+                    <svg viewBox="0 0 18 32" className="w-4 h-7 flex-shrink-0">
+                      <rect x="1" y="1" width="16" height="30" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                      {template === '1-frame' && (
+                        <rect x="3" y="3" width="12" height="26" rx="1" fill="currentColor" opacity="0.3" />
+                      )}
+                      {template === '2-frame' && (
+                        <>
+                          <rect x="3" y="3" width="12" height="12" rx="1" fill="currentColor" opacity="0.3" />
+                          <rect x="3" y="17" width="12" height="12" rx="1" fill="currentColor" opacity="0.3" />
+                        </>
+                      )}
+                      {template === '3-frame' && (
+                        <>
+                          <rect x="3" y="3" width="5" height="8" rx="1" fill="currentColor" opacity="0.3" />
+                          <rect x="10" y="3" width="5" height="8" rx="1" fill="currentColor" opacity="0.3" />
+                          <rect x="3" y="13" width="12" height="16" rx="1" fill="currentColor" opacity="0.3" />
+                        </>
+                      )}
+                    </svg>
+                    <span className="text-sm font-medium">
+                      {template === '1-frame' ? 'Single' : template === '2-frame' ? 'Split' : 'Triple'}
+                    </span>
+                  </button>
+                ))}
               </div>
+            </div>
 
-              {/* Text Styling - Compact */}
-              <div className="bg-gray-800 rounded-lg border border-gray-700 p-3">
-                <TextStylingPanel
-                  initialStyle={textStyle}
-                  onStyleChange={handleStyleChange}
-                  compact={true}
+            {/* 9:16 Preview */}
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 flex-1 flex flex-col min-h-0">
+              <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                9:16 Preview
+              </h4>
+              <div className="flex-1 flex items-center justify-center">
+                <PreviewLayout
+                  src={getVideoUrl(project.video_path!)}
+                  srcType="video"
+                  template={cropTemplate}
+                  normalizedCoordinates={cropCoordinates}
+                  width={180}
+                  textStyle={textStyle}
+                  subtitleText={selectedMoment.text?.slice(0, 50) || 'Sample subtitle'}
+                  mainVideoRef={videoRef}
+                  currentTime={currentTime}
                 />
               </div>
             </div>
 
+            {/* Text Styling - Compact */}
+            <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3 flex-shrink-0">
+              <TextStylingPanel
+                initialStyle={textStyle}
+                onStyleChange={handleStyleChange}
+                compact={true}
+              />
+            </div>
+
             {/* Render Button and Status */}
-            <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3">
+            <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3 flex-shrink-0">
               {renderProgress ? (
                 <ProgressBar {...renderProgress} />
               ) : (
@@ -975,14 +993,14 @@ const ProjectEditor = () => {
             </div>
           </div>
 
-          {/* Right: Moments Sidebar - far right, scrollable */}
-          <div className="w-72 flex-shrink-0">
+          {/* Right Column (25%): AI Moments Sidebar - scrollable */}
+          <div className="pl-2 overflow-hidden">
             <MomentsSidebar
               moments={timelineMarkers}
               selectedMomentId={selectedMomentId}
               onMomentClick={handleMomentClick}
               onMomentDelete={handleMomentDelete}
-              className="h-full"
+              className="h-full overflow-y-auto"
             />
           </div>
         </div>
