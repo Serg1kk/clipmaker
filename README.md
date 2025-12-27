@@ -446,7 +446,7 @@ After transcription, use AI to automatically detect engaging moments.
 
 ### Step 6: Selecting a Template
 
-Choose a frame layout for your final clip.
+Choose a frame layout for your final clip. Templates are displayed as vertical 9:16 icons matching the output format.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -455,15 +455,15 @@ Choose a frame layout for your final clip.
 │                                                                 │
 │  Select video template layout:                                  │
 │                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ ┌──────────┐ │  │ ┌────┐┌────┐ │  │ ┌──┐┌──┐┌──┐ │          │
-│  │ │          │ │  │ │    ││    │ │  │ │  ││  ││  │ │          │
-│  │ │  Single  │ │  │ │Side││Side│ │  │ │TripleFrame │          │
-│  │ │  Frame   │ │  │ │    ││    │ │  │ │  ││  ││  │ │          │
-│  │ └──────────┘ │  │ └────┘└────┘ │  │ └──┘└──┘└──┘ │          │
-│  │  [✓] Active  │  │              │  │              │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-│   Single Frame      Two Frames       Three Frames              │
+│        ┌─────┐         ┌─────┐         ┌─────┐                 │
+│        │     │         │ ▀▀▀ │         │▀ ▀  │                 │
+│        │     │         │─────│         │─────│                 │
+│        │  █  │         │     │         │     │                 │
+│        │     │         │ ▄▄▄ │         │  █  │                 │
+│        │     │         │     │         │     │                 │
+│        └─────┘         └─────┘         └─────┘                 │
+│       1-Frame          2-Frame         3-Frame                  │
+│       [✓ Selected]                                              │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -472,9 +472,9 @@ Choose a frame layout for your final clip.
 
 | Template | Description | Best For |
 |----------|-------------|----------|
-| **Single Frame** | One video frame, full width | Standard clips, talking heads |
-| **Two Frames** | Side-by-side dual layout | Reactions, comparisons |
-| **Three Frames** | Triple frame layout | Multi-angle, B-roll heavy |
+| **1-Frame** | Full 9:16 vertical frame | Standard clips, talking heads |
+| **2-Frame** | Two 9:8 frames stacked vertically | Dual speakers, reactions |
+| **3-Frame** | Two small speakers on top + large screen below | Podcasts, presentations with screen share |
 
 ---
 
@@ -488,17 +488,17 @@ All templates output in **9:16 portrait aspect ratio** (1080×1920 pixels) optim
 ├────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                        │
-│  │             │    │  Frame 1    │    │ Fr.1 │ Fr.2 │ ◄── 40% height         │
-│  │             │    │─────────────│    │      │      │     (768px each)       │
-│  │   Frame 1   │    │  50% each   │    ├──────┴──────┤                        │
+│  │             │    │  Frame 1    │    │ Fr.1 │ Fr.2 │ ◄── 25% height         │
+│  │             │    │─────────────│    │      │      │     (480px each)       │
+│  │   Frame 1   │    │  50% each   │    ├──────┴──────┤     Nearly square      │
 │  │   (100%)    │    │  (960px)    │    │             │                        │
-│  │             │    │─────────────│    │   Frame 3   │ ◄── 60% height         │
-│  │             │    │  Frame 2    │    │   (1152px)  │                        │
+│  │             │    │─────────────│    │   Frame 3   │ ◄── 75% height         │
+│  │             │    │  Frame 2    │    │  (1440px)   │     Wide for screen    │
 │  │             │    │             │    │             │                        │
 │  └─────────────┘    └─────────────┘    └─────────────┘                        │
 │   1-FRAME            2-FRAME            3-FRAME                               │
-│   1080×1920          1080×960 each      540×768 (top)                         │
-│   (full screen)      (stacked)          1080×1152 (bottom)                    │
+│   1080×1920          1080×960 each      540×480 (speakers)                    │
+│   (full screen)      (stacked)          1080×1440 (screen)                    │
 │                                                                                │
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -510,15 +510,26 @@ All templates output in **9:16 portrait aspect ratio** (1080×1920 pixels) optim
 | **1-Frame** | Frame 1 | Full screen | 1080×1920 | 9:16 (0.5625) |
 | **2-Frame** | Frame 1 | Top half | 1080×960 | 9:8 (1.125) |
 | **2-Frame** | Frame 2 | Bottom half | 1080×960 | 9:8 (1.125) |
-| **3-Frame** | Frame 1 | Top-left | 540×768 | ~0.703 |
-| **3-Frame** | Frame 2 | Top-right | 540×768 | ~0.703 |
-| **3-Frame** | Frame 3 | Bottom full | 1080×1152 | 0.9375 |
+| **3-Frame** | Frame 1 | Top-left (speaker) | 540×480 | 1.125 (nearly square) |
+| **3-Frame** | Frame 2 | Top-right (speaker) | 540×480 | 1.125 (nearly square) |
+| **3-Frame** | Frame 3 | Bottom (screen) | 1080×1440 | 0.75 (wide horizontal) |
 
 **Frame Cropping:**
 - Each frame has an interactive crop rectangle in the source video
-- Drag crop areas to select which part of your video appears in each frame
+- **Default crop areas are small and non-overlapping** - just drag to position, no resizing needed
 - Crop rectangles maintain the target aspect ratio for each frame position
 - The Preview panel shows exactly how crops will appear in the final output
+
+**Default Crop Sizes (on source video):**
+
+| Template | Crop Area | Width | Aspect Ratio | Position |
+|----------|-----------|-------|--------------|----------|
+| **1-Frame** | Single | 25% | 9:16 vertical | Centered |
+| **2-Frame** | Left speaker | 20% | 9:8 | x=15% |
+| **2-Frame** | Right speaker | 20% | 9:8 | x=65% |
+| **3-Frame** | Top-left speaker | 15% | 1:1 square | Top-left corner |
+| **3-Frame** | Top-right speaker | 15% | 1:1 square | Top-right corner |
+| **3-Frame** | Bottom screen | 30% | 16:9 wide | Bottom center |
 
 ---
 
