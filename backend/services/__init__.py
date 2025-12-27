@@ -72,6 +72,30 @@ from .karaoke_generator import (
     ASSAlignment,
     KaraokeEffect,
 )
+from .composite_service import (
+    CompositeService,
+    CompositeError,
+    InvalidTemplateError,
+    SlotMismatchError,
+    FilterBuildError,
+    CompositeProgress,
+    FilterComplexBuilder,
+    composite_video,
+)
+from .render_service import (
+    RenderService,
+    RenderRequest,
+    RenderError,
+    SubtitleBurnError,
+    AudioMergeError,
+    MomentExtractionError,
+    RenderProgress,
+    SubtitleConfig,
+    AudioConfig,
+    SubtitlePosition,
+    AudioMode,
+    render_final_clip,
+)
 
 __all__ = [
     # File Browser
@@ -122,4 +146,26 @@ __all__ = [
     "ASSColor",
     "ASSAlignment",
     "KaraokeEffect",
+    # Composite Service
+    "CompositeService",
+    "CompositeError",
+    "InvalidTemplateError",
+    "SlotMismatchError",
+    "FilterBuildError",
+    "CompositeProgress",
+    "FilterComplexBuilder",
+    "composite_video",
+    # Render Service
+    "RenderService",
+    "RenderRequest",
+    "RenderError",
+    "SubtitleBurnError",
+    "AudioMergeError",
+    "MomentExtractionError",
+    "RenderProgress",
+    "SubtitleConfig",
+    "AudioConfig",
+    "SubtitlePosition",
+    "AudioMode",
+    "render_final_clip",
 ]
