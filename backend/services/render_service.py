@@ -975,10 +975,16 @@ class RenderService:
                     width=template.output_width,
                     height=template.output_height,
                     duration=video_info.duration,
-                    fps=template.output_fps,
-                    codec=video_info.codec,
+                    duration_formatted=video_info.duration_formatted,
+                    video_codec=video_info.video_codec,
                     audio_codec=video_info.audio_codec,
+                    frame_rate=template.output_fps,
                     bitrate=video_info.bitrate,
+                    file_size=video_info.file_size,
+                    has_audio=video_info.has_audio,
+                    audio_sample_rate=video_info.audio_sample_rate,
+                    audio_channels=video_info.audio_channels,
+                    format_name=video_info.format_name,
                 )
                 logger.info(f"Composite output: {template.output_width}x{template.output_height}")
 
