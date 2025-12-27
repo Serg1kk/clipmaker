@@ -971,6 +971,10 @@ async def stream_video(
     # Parse Range header for partial content requests
     range_header = request.headers.get("range")
 
+    # Encode filename for HTTP headers (handle non-ASCII characters)
+    from urllib.parse import quote
+    encoded_filename = quote(video_path.name)
+
     if range_header:
         # Parse range like "bytes=0-1023"
         range_match = range_header.replace("bytes=", "").split("-")
@@ -1000,7 +1004,7 @@ async def stream_video(
             "Content-Range": f"bytes {start}-{end}/{file_size}",
             "Accept-Ranges": "bytes",
             "Content-Length": str(content_length),
-            "Content-Disposition": f'inline; filename="{video_path.name}"',
+            "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
         }
 
         return StreamingResponse(
@@ -1020,7 +1024,7 @@ async def stream_video(
     headers = {
         "Accept-Ranges": "bytes",
         "Content-Length": str(file_size),
-        "Content-Disposition": f'inline; filename="{video_path.name}"',
+        "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
     }
 
     return StreamingResponse(
