@@ -307,9 +307,9 @@ async def process_find_moments(
         await connection_manager.broadcast_to_job(job_id, ProgressMessage(
             type="moments_progress",
             job_id=job_id,
-            stage="loading",
+            stage="Finding AI Moments",
             progress=5.0,
-            message="Loading transcription data...",
+            message="Preparing transcript for analysis...",
         ))
 
         # Load project
@@ -338,9 +338,9 @@ async def process_find_moments(
         await connection_manager.broadcast_to_job(job_id, ProgressMessage(
             type="moments_progress",
             job_id=job_id,
-            stage="analyzing",
+            stage="Finding AI Moments",
             progress=20.0,
-            message="Analyzing transcript with AI...",
+            message="AI is analyzing your transcript...",
         ))
 
         # Find engaging moments using Gemini
@@ -353,9 +353,9 @@ async def process_find_moments(
         await connection_manager.broadcast_to_job(job_id, ProgressMessage(
             type="moments_progress",
             job_id=job_id,
-            stage="processing",
+            stage="Saving Moments",
             progress=80.0,
-            message=f"Found {len(moments)} engaging moments...",
+            message=f"Found {len(moments)} engaging moments, saving...",
         ))
 
         # Convert to MomentData and save to project
