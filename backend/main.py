@@ -34,6 +34,7 @@ from services.websocket_service import (
     handle_websocket_messages,
     ProgressTracker,
     ProgressStage,
+    ProgressMessage,
 )
 from services.video_files_service import (
     video_files_service,
@@ -43,6 +44,18 @@ from services.video_files_service import (
 )
 from services.ffmpeg_service import FFmpegService, AudioFormat, ExtractionProgress
 from services.whisper_service import WhisperService, TranscriptionResult
+from services.render_service import (
+    RenderService,
+    RenderRequest,
+    RenderProgress,
+    RenderError,
+    SubtitleConfig,
+    AudioConfig,
+    AudioMode,
+    SubtitlePosition,
+)
+from models.transcription_moment import TranscriptionMoment
+from services.json_storage import JSONFileStorage, EntityNotFoundError
 
 
 # Configuration
@@ -107,6 +120,82 @@ class HealthResponse(BaseModel):
 
 # In-memory job store (replace with Redis/database in production)
 jobs_store: dict[str, TranscriptionJob] = {}
+
+
+# =============================================================================
+# Render Job Models and Store
+# =============================================================================
+
+
+class RenderJobStatus(str, Enum):
+    """Render job status enumeration."""
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class RenderJob(BaseModel):
+    """Model representing a render job."""
+    job_id: str = Field(..., description="Unique job identifier")
+    project_id: str = Field(..., description="Project ID")
+    moment_id: str = Field(..., description="Moment ID to render")
+    status: RenderJobStatus = Field(default=RenderJobStatus.PENDING)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    progress: float = Field(default=0.0, ge=0.0, le=100.0)
+    current_phase: str = Field(default="pending")
+    message: str = Field(default="Waiting to start...")
+    output_path: Optional[str] = None
+    error: Optional[str] = None
+
+
+class RenderEndpointRequest(BaseModel):
+    """Request model for render endpoint."""
+    project_id: str = Field(..., description="Project ID containing the moment")
+    moment_id: str = Field(..., description="Moment ID to render")
+    subtitle_config: Optional[dict] = Field(
+        default=None,
+        description="Optional subtitle configuration overrides"
+    )
+    audio_config: Optional[dict] = Field(
+        default=None,
+        description="Optional audio configuration overrides"
+    )
+    output_filename: Optional[str] = Field(
+        default=None,
+        description="Optional custom output filename"
+    )
+
+
+class RenderEndpointResponse(BaseModel):
+    """Response model for render job creation."""
+    job_id: str
+    status: RenderJobStatus
+    message: str
+    websocket_url: str
+
+
+class RenderJobStatusResponse(BaseModel):
+    """Response model for render job status queries."""
+    job_id: str
+    project_id: str
+    moment_id: str
+    status: RenderJobStatus
+    progress: float
+    current_phase: str
+    message: str
+    created_at: datetime
+    updated_at: datetime
+    output_path: Optional[str] = None
+    error: Optional[str] = None
+
+
+# In-memory render job store
+render_jobs_store: dict[str, RenderJob] = {}
+
+# Initialize render service
+render_service = RenderService()
 
 
 # FastAPI Application
@@ -826,9 +915,441 @@ async def global_exception_handler(request, exc: Exception) -> JSONResponse:
     )
 
 
+# =============================================================================
+# Render API Endpoints
+# =============================================================================
+
+
+class RenderProgressStage(str, Enum):
+    """Render progress stage enumeration."""
+    PENDING = "pending"
+    LOADING = "loading"
+    EXTRACTING = "extracting"
+    COMPOSITING = "compositing"
+    SUBTITLES = "subtitles"
+    AUDIO = "audio"
+    FINALIZING = "finalizing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class RenderProgressTracker:
+    """
+    Helper class for tracking and broadcasting render job progress.
+    """
+
+    def __init__(self, job_id: str):
+        self.job_id = job_id
+
+    async def update_progress(
+        self,
+        stage: str,
+        progress: float,
+        message: str,
+        current_step: Optional[int] = None,
+        total_steps: int = 5,
+    ) -> None:
+        """Update and broadcast render job progress."""
+        details = {
+            "current_step": current_step or 0,
+            "total_steps": total_steps,
+        }
+
+        progress_message = ProgressMessage(
+            type="render_progress",
+            job_id=self.job_id,
+            stage=stage,
+            progress=progress,
+            message=message,
+            details=details,
+        )
+
+        await connection_manager.broadcast_to_job(self.job_id, progress_message)
+
+    async def complete(self, output_path: str) -> None:
+        """Mark render as completed and broadcast."""
+        await self.update_progress(
+            stage=RenderProgressStage.COMPLETED.value,
+            progress=100.0,
+            message=f"Render complete: {output_path}",
+            current_step=5,
+        )
+
+    async def fail(self, error_message: str) -> None:
+        """Mark render as failed and broadcast."""
+        await self.update_progress(
+            stage=RenderProgressStage.FAILED.value,
+            progress=0.0,
+            message=f"Error: {error_message}",
+        )
+
+
+async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
+    """
+    Background task to process video rendering.
+
+    Args:
+        job_id: The unique identifier of the render job
+        request: The render request with project_id and moment_id
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    job = render_jobs_store.get(job_id)
+    if not job:
+        return
+
+    # Create progress tracker for WebSocket updates
+    tracker = RenderProgressTracker(job_id=job_id)
+
+    try:
+        job.status = RenderJobStatus.PROCESSING
+        job.current_phase = RenderProgressStage.LOADING.value
+        job.message = "Loading project data..."
+        job.updated_at = datetime.utcnow()
+
+        await tracker.update_progress(
+            stage=RenderProgressStage.LOADING.value,
+            progress=0.0,
+            message="Loading project and moment data...",
+            current_step=1,
+        )
+
+        # Load project from storage
+        from models.transcription_moment import ProjectTranscriptionMoment
+
+        project_storage = JSONFileStorage(
+            base_path="data/projects",
+            model_class=ProjectTranscriptionMoment,
+            auto_create_dir=True,
+        )
+
+        try:
+            project = project_storage.load(request.project_id)
+        except EntityNotFoundError:
+            raise ValueError(f"Project not found: {request.project_id}")
+
+        # Find the moment
+        moment = project.get_moment_by_id(request.moment_id)
+        if not moment:
+            raise ValueError(f"Moment not found: {request.moment_id}")
+
+        # Get video path from project
+        if not project.video_path:
+            raise ValueError("Project has no video path configured")
+
+        source_video_path = project.video_path
+
+        job.progress = 10.0
+        job.message = "Project loaded, preparing render..."
+        job.updated_at = datetime.utcnow()
+
+        await tracker.update_progress(
+            stage=RenderProgressStage.LOADING.value,
+            progress=10.0,
+            message=f"Loaded moment: {moment.text[:50]}...",
+            current_step=1,
+        )
+
+        # Build subtitle words from the moment's word indices
+        # Get words from transcription segments if available
+        subtitle_words = None
+        # Note: In production, you would load word timing from the transcription
+
+        # Build subtitle config
+        subtitle_cfg = SubtitleConfig()
+        if request.subtitle_config:
+            subtitle_cfg = SubtitleConfig(**request.subtitle_config)
+
+        # Build audio config
+        audio_cfg = AudioConfig()
+        if request.audio_config:
+            audio_cfg = AudioConfig(**request.audio_config)
+
+        # Create render request
+        render_request = RenderRequest(
+            moment=moment,
+            source_video_path=source_video_path,
+            subtitle_words=subtitle_words,
+            subtitle_config=subtitle_cfg,
+            audio_config=audio_cfg,
+            output_filename=request.output_filename,
+        )
+
+        # Progress callback that updates job and broadcasts
+        def on_render_progress(progress: RenderProgress) -> None:
+            phase_map = {
+                "extracting": RenderProgressStage.EXTRACTING.value,
+                "compositing": RenderProgressStage.COMPOSITING.value,
+                "subtitles": RenderProgressStage.SUBTITLES.value,
+                "audio": RenderProgressStage.AUDIO.value,
+                "complete": RenderProgressStage.FINALIZING.value,
+            }
+            stage = phase_map.get(progress.phase, progress.phase)
+
+            # Map progress to overall percentage (10-90% for render phases)
+            overall_progress = 10.0 + (progress.percent * 0.8)
+
+            job.progress = overall_progress
+            job.current_phase = stage
+            job.message = progress.message
+            job.updated_at = datetime.utcnow()
+
+            # Use asyncio to broadcast
+            asyncio.create_task(tracker.update_progress(
+                stage=stage,
+                progress=overall_progress,
+                message=progress.message,
+                current_step=progress.current_step + 1,
+            ))
+
+        # Execute render
+        output_path = await render_service.render_final_clip(
+            request=render_request,
+            progress_callback=on_render_progress,
+        )
+
+        # Update job as completed
+        job.status = RenderJobStatus.COMPLETED
+        job.progress = 100.0
+        job.current_phase = RenderProgressStage.COMPLETED.value
+        job.message = "Render completed successfully"
+        job.output_path = str(output_path)
+        job.updated_at = datetime.utcnow()
+
+        logger.info(f"Render completed for job {job_id}: {output_path}")
+
+        await tracker.complete(str(output_path))
+
+    except Exception as e:
+        job.status = RenderJobStatus.FAILED
+        job.current_phase = RenderProgressStage.FAILED.value
+        job.message = str(e)
+        job.error = str(e)
+        job.updated_at = datetime.utcnow()
+
+        logger.error(f"Render failed for job {job_id}: {e}")
+        await tracker.fail(str(e))
+
+
+@app.post(
+    "/render",
+    response_model=RenderEndpointResponse,
+    status_code=202,
+    summary="Submit render job",
+    description="Submit a moment for rendering with optional subtitle and audio configuration",
+    tags=["Render"],
+)
+async def create_render_job(
+    background_tasks: BackgroundTasks,
+    request: RenderEndpointRequest,
+) -> RenderEndpointResponse:
+    """
+    Create a new render job for a moment.
+
+    Accepts project_id and moment_id, loads the project data,
+    and initiates background rendering with real-time progress via WebSocket.
+
+    Returns a job ID for tracking the render progress.
+    """
+    job_id = str(uuid.uuid4())
+
+    # Create job record
+    job = RenderJob(
+        job_id=job_id,
+        project_id=request.project_id,
+        moment_id=request.moment_id,
+    )
+
+    # Store job and start background processing
+    render_jobs_store[job_id] = job
+    background_tasks.add_task(process_render, job_id, request)
+
+    return RenderEndpointResponse(
+        job_id=job_id,
+        status=RenderJobStatus.PENDING,
+        message="Render job created successfully",
+        websocket_url=f"/ws/render/{job_id}",
+    )
+
+
+@app.get(
+    "/render/{job_id}",
+    response_model=RenderJobStatusResponse,
+    summary="Get render job status",
+    description="Retrieve the status and result of a render job",
+    tags=["Render"],
+)
+async def get_render_job_status(job_id: str) -> RenderJobStatusResponse:
+    """
+    Get the status of a render job.
+
+    Args:
+        job_id: The unique identifier of the render job
+
+    Returns:
+        Job status including progress and output path if completed
+    """
+    job = render_jobs_store.get(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Render job not found: {job_id}",
+        )
+
+    return RenderJobStatusResponse(
+        job_id=job.job_id,
+        project_id=job.project_id,
+        moment_id=job.moment_id,
+        status=job.status,
+        progress=job.progress,
+        current_phase=job.current_phase,
+        message=job.message,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        output_path=job.output_path,
+        error=job.error,
+    )
+
+
+@app.get(
+    "/render",
+    response_model=list[RenderJobStatusResponse],
+    summary="List render jobs",
+    description="List all render jobs with optional status filter",
+    tags=["Render"],
+)
+async def list_render_jobs(
+    status: Optional[RenderJobStatus] = None,
+    limit: int = 50,
+) -> list[RenderJobStatusResponse]:
+    """
+    List all render jobs with optional status filter.
+
+    Args:
+        status: Filter by job status
+        limit: Maximum number of jobs to return
+
+    Returns:
+        List of render job status responses
+    """
+    jobs = list(render_jobs_store.values())
+
+    if status:
+        jobs = [j for j in jobs if j.status == status]
+
+    jobs = sorted(jobs, key=lambda x: x.created_at, reverse=True)[:limit]
+
+    return [
+        RenderJobStatusResponse(
+            job_id=j.job_id,
+            project_id=j.project_id,
+            moment_id=j.moment_id,
+            status=j.status,
+            progress=j.progress,
+            current_phase=j.current_phase,
+            message=j.message,
+            created_at=j.created_at,
+            updated_at=j.updated_at,
+            output_path=j.output_path,
+            error=j.error,
+        )
+        for j in jobs
+    ]
+
+
+@app.delete(
+    "/render/{job_id}",
+    summary="Cancel/delete a render job",
+    tags=["Render"],
+)
+async def delete_render_job(job_id: str) -> JSONResponse:
+    """
+    Cancel a pending render job or delete a completed/failed job.
+
+    Args:
+        job_id: The unique identifier of the render job
+
+    Returns:
+        Confirmation message
+    """
+    job = render_jobs_store.get(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Render job not found: {job_id}",
+        )
+
+    del render_jobs_store[job_id]
+
+    return JSONResponse(
+        status_code=200,
+        content={"message": f"Render job {job_id} deleted successfully"},
+    )
+
+
 # ============================================================================
 # WebSocket Endpoints
 # ============================================================================
+
+
+@app.websocket("/ws/render/{job_id}")
+async def websocket_render_progress(websocket: WebSocket, job_id: str):
+    """
+    WebSocket endpoint for subscribing to render job progress updates.
+
+    Args:
+        websocket: The WebSocket connection
+        job_id: The render job ID to subscribe to
+
+    Messages sent to client:
+        - Progress updates: {"type": "render_progress", "job_id": "...", "stage": "...", ...}
+        - Ping messages: {"type": "ping", "timestamp": "..."}
+
+    Messages accepted from client:
+        - Pong responses: {"type": "pong"}
+        - Ping requests: {"type": "ping"} (server responds with pong)
+    """
+    # Check if render job exists
+    job = render_jobs_store.get(job_id)
+
+    # Connect to the job's progress channel
+    connected = await connection_manager.connect_to_job(websocket, job_id)
+    if not connected:
+        await websocket.close(code=1013, reason="Connection limit reached")
+        return
+
+    try:
+        # Send initial status if job exists
+        if job:
+            initial_message = {
+                "type": "initial_render_status",
+                "job_id": job.job_id,
+                "project_id": job.project_id,
+                "moment_id": job.moment_id,
+                "status": job.status.value,
+                "progress": job.progress,
+                "current_phase": job.current_phase,
+                "message": job.message,
+                "output_path": job.output_path,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+            await websocket.send_json(initial_message)
+        else:
+            await websocket.send_json({
+                "type": "waiting",
+                "job_id": job_id,
+                "message": "Waiting for render job to start...",
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            })
+
+        # Handle incoming messages (ping/pong, etc.)
+        await handle_websocket_messages(websocket)
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await connection_manager.disconnect(websocket)
 
 
 @app.websocket("/ws/job/{job_id}")
