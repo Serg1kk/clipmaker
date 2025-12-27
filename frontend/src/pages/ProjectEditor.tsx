@@ -106,6 +106,8 @@ const ProjectEditor = () => {
   // Refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  // Track if auto-pause is active for the current moment (prevents re-triggering after manual play)
+  const autoPauseEnabledRef = useRef<boolean>(false);
 
   // Determine workflow stage based on project state
   useEffect(() => {
@@ -174,6 +176,26 @@ const ProjectEditor = () => {
     if (!selectedMomentId || !project?.moments) return null;
     return project.moments.find(m => m.id === selectedMomentId) || null;
   }, [selectedMomentId, project?.moments]);
+
+  // Auto-pause when video reaches moment end time
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !selectedMoment) return;
+
+    const handleTimeUpdate = () => {
+      // Only auto-pause if enabled and we've reached or passed the end time
+      if (autoPauseEnabledRef.current && video.currentTime >= selectedMoment.end) {
+        video.pause();
+        // Clamp to exact end time to prevent drift
+        video.currentTime = selectedMoment.end;
+        // Disable auto-pause until next moment selection (allows manual replay)
+        autoPauseEnabledRef.current = false;
+      }
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [selectedMoment]);
 
   // Fetch project
   useEffect(() => {
@@ -586,9 +608,15 @@ const ProjectEditor = () => {
       }
 
       setSelectedMomentId(marker.id);
-      // Seek video to moment start
+      // Seek video to moment start and start playback
       if (videoRef.current && typeof marker.startTime === 'number') {
         videoRef.current.currentTime = marker.startTime;
+        // Enable auto-pause for this moment playback
+        autoPauseEnabledRef.current = true;
+        // Start playing the video
+        videoRef.current.play().catch(() => {
+          // Ignore play() errors (e.g., user hasn't interacted with page yet)
+        });
       }
       setCurrentTime(marker.startTime ?? 0);
       setSelectedRange({
