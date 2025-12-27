@@ -576,53 +576,67 @@ const ProjectEditor = () => {
 
   // Handle moment selection
   const handleMomentClick = useCallback(async (marker: TimelineMarker) => {
-    setSelectedMomentId(marker.id);
-    // Seek video to moment start
-    if (videoRef.current) {
-      videoRef.current.currentTime = marker.startTime;
-    }
-    setCurrentTime(marker.startTime);
-    setSelectedRange({ start: marker.startTime, end: marker.endTime });
-
-    // Load the moment's saved settings
-    const moment = project?.moments?.find(m => m.id === marker.id);
-    if (moment) {
-      // Restore crop settings
-      if (moment.crop_template) {
-        setCropTemplate(moment.crop_template as TemplateType);
-      }
-      if (moment.crop_coordinates) {
-        setCropCoordinates(moment.crop_coordinates as NormalizedCropCoordinates[]);
-      } else {
-        setCropCoordinates([]);
+    try {
+      // Validate marker before processing
+      if (!marker || !marker.id) {
+        console.error('handleMomentClick: Invalid marker', marker);
+        return;
       }
 
-      // Restore subtitle settings
-      if (moment.subtitle_config) {
-        const cfg = moment.subtitle_config as Record<string, unknown>;
-        setTextStyle({
-          subtitlesEnabled: cfg.enabled as boolean ?? true,
-          fontFamily: (cfg.font_family as FontFamily) ?? DEFAULT_TEXT_STYLE.fontFamily,
-          fontSize: cfg.font_size as number ?? DEFAULT_TEXT_STYLE.fontSize,
-          textColor: cfg.text_color as string ?? DEFAULT_TEXT_STYLE.textColor,
-          position: (cfg.position as TextPosition) ?? DEFAULT_TEXT_STYLE.position,
-        });
-      } else {
-        setTextStyle(DEFAULT_TEXT_STYLE);
+      setSelectedMomentId(marker.id);
+      // Seek video to moment start
+      if (videoRef.current && typeof marker.startTime === 'number') {
+        videoRef.current.currentTime = marker.startTime;
       }
-    }
+      setCurrentTime(marker.startTime ?? 0);
+      setSelectedRange({
+        start: marker.startTime ?? 0,
+        end: marker.endTime ?? 0
+      });
 
-    // Save current_moment_id to project for state persistence
-    if (projectId) {
-      try {
-        await fetch(`${API_BASE}/projects/${projectId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ current_moment_id: marker.id }),
-        });
-      } catch (e) {
-        console.error('Failed to save current moment:', e);
+      // Load the moment's saved settings
+      const moment = project?.moments?.find(m => m.id === marker.id);
+      if (moment) {
+        // Restore crop settings
+        if (moment.crop_template) {
+          setCropTemplate(moment.crop_template as TemplateType);
+        }
+        if (moment.crop_coordinates && Array.isArray(moment.crop_coordinates)) {
+          setCropCoordinates(moment.crop_coordinates as NormalizedCropCoordinates[]);
+        } else {
+          setCropCoordinates([]);
+        }
+
+        // Restore subtitle settings
+        if (moment.subtitle_config) {
+          const cfg = moment.subtitle_config as Record<string, unknown>;
+          setTextStyle({
+            subtitlesEnabled: cfg.enabled as boolean ?? true,
+            fontFamily: (cfg.font_family as FontFamily) ?? DEFAULT_TEXT_STYLE.fontFamily,
+            fontSize: cfg.font_size as number ?? DEFAULT_TEXT_STYLE.fontSize,
+            textColor: cfg.text_color as string ?? DEFAULT_TEXT_STYLE.textColor,
+            position: (cfg.position as TextPosition) ?? DEFAULT_TEXT_STYLE.position,
+          });
+        } else {
+          setTextStyle(DEFAULT_TEXT_STYLE);
+        }
       }
+
+      // Save current_moment_id to project for state persistence
+      if (projectId) {
+        try {
+          await fetch(`${API_BASE}/projects/${projectId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_moment_id: marker.id }),
+          });
+        } catch (e) {
+          console.error('Failed to save current moment:', e);
+        }
+      }
+    } catch (error) {
+      console.error('handleMomentClick error:', error);
+      // Don't rethrow - prevent grey screen crash
     }
   }, [project?.moments, projectId]);
 
@@ -681,18 +695,29 @@ const ProjectEditor = () => {
 
   // Handle template change
   const handleTemplateChange = useCallback(async (template: TemplateType) => {
-    setCropTemplate(template);
-
-    if (!projectId || !selectedMomentId) return;
-
     try {
-      await fetch(`${API_BASE}/projects/${projectId}/moments/${selectedMomentId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ crop_template: template }),
-      });
-    } catch (e) {
-      console.error('Failed to save template:', e);
+      // Validate template value
+      if (!template || !['1-frame', '2-frame', '3-frame'].includes(template)) {
+        console.error('handleTemplateChange: Invalid template', template);
+        return;
+      }
+
+      setCropTemplate(template);
+
+      if (!projectId || !selectedMomentId) return;
+
+      try {
+        await fetch(`${API_BASE}/projects/${projectId}/moments/${selectedMomentId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ crop_template: template }),
+        });
+      } catch (e) {
+        console.error('Failed to save template:', e);
+      }
+    } catch (error) {
+      console.error('handleTemplateChange error:', error);
+      // Don't rethrow - prevent grey screen crash
     }
   }, [projectId, selectedMomentId]);
 
@@ -940,7 +965,7 @@ const ProjectEditor = () => {
                   normalizedCoordinates={cropCoordinates}
                   width={180}
                   textStyle={textStyle}
-                  subtitleText={selectedMoment.text?.slice(0, 50) || 'Sample subtitle'}
+                  subtitleText={(selectedMoment?.text ?? '').slice(0, 50) || 'Sample subtitle'}
                   mainVideoRef={videoRef}
                   currentTime={currentTime}
                 />
