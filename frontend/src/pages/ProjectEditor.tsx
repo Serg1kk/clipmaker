@@ -798,11 +798,11 @@ const ProjectEditor = () => {
       {/* Main layout - changes based on whether moment is selected */}
       {currentStage === 'edit-moments' && selectedMoment ? (
         /* 50/50 Split Layout when moment is selected */
-        <div className="flex gap-4 h-[calc(100vh-120px)]">
+        <div className="flex gap-4 h-[calc(100vh-120px)] overflow-y-auto">
           {/* Left + Center: Video Player and Preview (combined area) */}
           <div className="flex-1 flex flex-col min-w-0">
             {/* Top row: 50/50 Video Player and Preview */}
-            <div className="flex gap-4 flex-1 min-h-0">
+            <div className="flex gap-4 flex-1 min-h-0 items-start">
               {/* Left: Video Player with crop overlay (50%) */}
               <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col min-w-0">
                 <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
@@ -824,7 +824,15 @@ const ProjectEditor = () => {
               </div>
 
               {/* Right: 9:16 Preview (50%) - sticky */}
-              <div className="flex-1 bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col min-w-0">
+              <div
+                className="flex-1 bg-gray-800 rounded-lg border border-gray-700 p-3 flex flex-col min-w-0"
+                style={{
+                  position: 'sticky',
+                  top: '1rem',
+                  alignSelf: 'flex-start',
+                  maxHeight: 'calc(100vh - 2rem)',
+                }}
+              >
                 <h4 className="text-sm font-medium text-gray-300 mb-2 flex items-center gap-2">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />

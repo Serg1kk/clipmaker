@@ -432,30 +432,6 @@ const TextStylingPanel = ({
         />
       </div>
 
-      {/* Preview */}
-      <div className="mt-4 p-4 bg-gray-800 rounded-lg border-2 border-gray-700">
-        <div className="text-xs text-gray-500 mb-2">Preview</div>
-        <div
-          className={`
-            h-24 rounded bg-gray-700 relative overflow-hidden
-            flex items-${style.position === 'top' ? 'start' : style.position === 'bottom' ? 'end' : 'center'}
-            justify-center p-2
-          `}
-          data-testid="text-preview"
-        >
-          <span
-            style={{
-              fontFamily: FONT_OPTIONS.find((f) => f.id === style.fontFamily)?.value || 'Arial, sans-serif',
-              fontSize: `${Math.min(style.fontSize, 32)}px`,
-              color: style.textColor,
-            }}
-            className="text-center max-w-full truncate"
-          >
-            Sample Text
-          </span>
-        </div>
-      </div>
-
       {/* Screen reader announcement */}
       <div className="sr-only" aria-live="polite" data-testid="style-announcement">
         {`Subtitles ${style.subtitlesEnabled ? 'enabled' : 'disabled'}, Style: ${style.fontFamily}, ${style.fontSize}px, ${style.textColor}, ${style.position}`}

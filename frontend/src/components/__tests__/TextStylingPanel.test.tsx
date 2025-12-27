@@ -52,9 +52,6 @@ describe('TextStylingPanel', () => {
 
       // Position selector
       expect(screen.getByTestId('position-selector')).toBeInTheDocument();
-
-      // Preview
-      expect(screen.getByTestId('text-preview')).toBeInTheDocument();
     });
 
     it('renders with custom className', () => {
@@ -318,23 +315,7 @@ describe('TextStylingPanel', () => {
     });
   });
 
-  describe('preview', () => {
-    it('renders preview section', () => {
-      render(<TextStylingPanel />);
-      expect(screen.getByTestId('text-preview')).toBeInTheDocument();
-    });
-
-    it('displays sample text in preview', () => {
-      render(<TextStylingPanel />);
-      expect(screen.getByText('Sample Text')).toBeInTheDocument();
-    });
-
-    it('applies text color to preview', () => {
-      render(<TextStylingPanel initialStyle={{ textColor: '#FF0000' }} />);
-      const sampleText = screen.getByText('Sample Text');
-      expect(sampleText).toHaveStyle({ color: 'rgb(255, 0, 0)' });
-    });
-  });
+  // Note: Preview section was removed - subtitles now preview on main 9:16 PreviewLayout
 
   describe('disabled state', () => {
     it('disables font family dropdown when disabled', () => {
