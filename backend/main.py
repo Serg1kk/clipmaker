@@ -9,6 +9,8 @@ This module provides a REST API for video transcription with:
 """
 
 import asyncio
+import logging
+import os
 import uuid
 from datetime import datetime
 from enum import Enum
@@ -59,11 +61,17 @@ from services.json_storage import JSONFileStorage, EntityNotFoundError
 from routers.projects import router as projects_router
 
 
+# Logger
+logger = logging.getLogger(__name__)
+
 # Configuration
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500MB
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+
+# Whisper model from environment (default: base)
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
 
 
 class JobStatus(str, Enum):
@@ -243,7 +251,8 @@ async def process_transcription(job_id: str) -> None:
 
     # Initialize services
     ffmpeg_service = FFmpegService(output_dir=UPLOAD_DIR / "audio")
-    whisper_service = WhisperService(model_size="base")
+    whisper_service = WhisperService(model_size=WHISPER_MODEL)
+    logger.info(f"Initialized WhisperService with model: {WHISPER_MODEL}")
 
     audio_path: Optional[Path] = None
 
@@ -310,10 +319,11 @@ async def process_transcription(job_id: str) -> None:
         await tracker.update_progress(
             stage=ProgressStage.TRANSCRIBING,
             progress=25.0,
-            message="Loading transcription model...",
+            message=f"Loading Whisper model: {WHISPER_MODEL}...",
             current_step=2,
             eta_seconds=int(video_info.duration * 2),  # Rough ETA
         )
+        logger.info(f"Loading Whisper model: {WHISPER_MODEL}")
 
         # Simple progress callback for Whisper (no async - just update job state)
         def on_whisper_progress(progress: float, message: str) -> None:
@@ -329,11 +339,19 @@ async def process_transcription(job_id: str) -> None:
             progress_callback=on_whisper_progress,
         )
 
+        # Log transcription result with model and language info
+        logger.info(
+            f"Transcription complete - Model: {WHISPER_MODEL}, "
+            f"Detected language: {transcription_result.language}, "
+            f"Segments: {len(transcription_result.segments)}, "
+            f"Duration: {transcription_result.duration:.1f}s"
+        )
+
         # Send progress update after transcription completes
         await tracker.update_progress(
             stage=ProgressStage.TRANSCRIBING,
             progress=85.0,
-            message="Transcription complete, processing results...",
+            message=f"Transcription complete (model: {WHISPER_MODEL}, lang: {transcription_result.language})",
             current_step=2,
             eta_seconds=None,
         )
@@ -375,6 +393,7 @@ async def process_transcription(job_id: str) -> None:
             ],
             "language": transcription_result.language,
             "duration": video_info.duration,
+            "model": WHISPER_MODEL,
         }
 
         # Store results
@@ -383,10 +402,14 @@ async def process_transcription(job_id: str) -> None:
         job.status = JobStatus.COMPLETED
         job.progress = 100.0
 
-        logger.info(f"Transcription completed for job {job_id}: {len(transcription_result.segments)} segments")
+        logger.info(
+            f"Transcription completed for job {job_id} - "
+            f"Model: {WHISPER_MODEL}, Language: {transcription_result.language}, "
+            f"Segments: {len(transcription_result.segments)}"
+        )
 
         # Complete
-        await tracker.complete(message="Transcription completed successfully!")
+        await tracker.complete(message=f"Transcription completed! (Model: {WHISPER_MODEL})")
 
     except FileNotFoundError as e:
         job.status = JobStatus.FAILED
