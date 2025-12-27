@@ -35,6 +35,10 @@ describe('TextStylingPanel', () => {
     it('renders all control sections', () => {
       render(<TextStylingPanel />);
 
+      // Subtitles enabled toggle
+      expect(screen.getByTestId('subtitles-enabled-toggle')).toBeInTheDocument();
+      expect(screen.getByText('Enable Subtitles')).toBeInTheDocument();
+
       // Font family dropdown
       expect(screen.getByTestId('font-family-select')).toBeInTheDocument();
       expect(screen.getByLabelText('Font Family')).toBeInTheDocument();
@@ -63,6 +67,9 @@ describe('TextStylingPanel', () => {
     it('uses default style values when no initial style provided', () => {
       render(<TextStylingPanel />);
 
+      // Subtitles enabled default
+      expect(screen.getByTestId('subtitles-enabled-toggle')).toHaveAttribute('aria-checked', 'true');
+
       // Font family default
       expect(screen.getByTestId('font-family-select')).toHaveValue(DEFAULT_TEXT_STYLE.fontFamily);
 
@@ -70,8 +77,8 @@ describe('TextStylingPanel', () => {
       expect(screen.getByTestId('font-size-value')).toHaveTextContent(`${DEFAULT_TEXT_STYLE.fontSize}px`);
       expect(screen.getByTestId('font-size-slider')).toHaveValue(String(DEFAULT_TEXT_STYLE.fontSize));
 
-      // Position default (bottom is default)
-      expect(screen.getByTestId('position-button-bottom')).toHaveAttribute('data-selected', 'true');
+      // Position default (center is default)
+      expect(screen.getByTestId('position-button-center')).toHaveAttribute('data-selected', 'true');
     });
 
     it('uses initial style values when provided', () => {
@@ -101,7 +108,7 @@ describe('TextStylingPanel', () => {
 
       // Default values for other properties
       expect(screen.getByTestId('font-family-select')).toHaveValue(DEFAULT_TEXT_STYLE.fontFamily);
-      expect(screen.getByTestId('position-button-bottom')).toHaveAttribute('data-selected', 'true');
+      expect(screen.getByTestId('position-button-center')).toHaveAttribute('data-selected', 'true');
     });
   });
 
@@ -206,6 +213,69 @@ describe('TextStylingPanel', () => {
       expect(onStyleChange).toHaveBeenCalledWith(
         expect.objectContaining({ textColor: '#EF4444' })
       );
+    });
+  });
+
+  describe('subtitles enabled toggle', () => {
+    it('renders the toggle switch', () => {
+      render(<TextStylingPanel />);
+      expect(screen.getByTestId('subtitles-enabled-toggle')).toBeInTheDocument();
+    });
+
+    it('is enabled by default', () => {
+      render(<TextStylingPanel />);
+      const toggle = screen.getByTestId('subtitles-enabled-toggle');
+      expect(toggle).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('respects initial subtitlesEnabled value', () => {
+      render(<TextStylingPanel initialStyle={{ subtitlesEnabled: false }} />);
+      const toggle = screen.getByTestId('subtitles-enabled-toggle');
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('calls onStyleChange when toggle is clicked', () => {
+      const onStyleChange = jest.fn();
+      render(<TextStylingPanel onStyleChange={onStyleChange} />);
+
+      const toggle = screen.getByTestId('subtitles-enabled-toggle');
+      fireEvent.click(toggle);
+
+      expect(onStyleChange).toHaveBeenCalledWith(
+        expect.objectContaining({ subtitlesEnabled: false })
+      );
+    });
+
+    it('toggles state when clicked', () => {
+      render(<TextStylingPanel />);
+      const toggle = screen.getByTestId('subtitles-enabled-toggle');
+
+      // Initially enabled
+      expect(toggle).toHaveAttribute('aria-checked', 'true');
+
+      // Click to disable
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+      // Click to enable again
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('is disabled when panel is disabled', () => {
+      render(<TextStylingPanel disabled />);
+      const toggle = screen.getByTestId('subtitles-enabled-toggle');
+      expect(toggle).toBeDisabled();
+    });
+
+    it('does not call onStyleChange when disabled and clicked', () => {
+      const onStyleChange = jest.fn();
+      render(<TextStylingPanel disabled onStyleChange={onStyleChange} />);
+
+      const toggle = screen.getByTestId('subtitles-enabled-toggle');
+      fireEvent.click(toggle);
+
+      expect(onStyleChange).not.toHaveBeenCalled();
     });
   });
 
@@ -336,6 +406,7 @@ describe('TextStylingPanel', () => {
       fireEvent.change(screen.getByTestId('font-family-select'), { target: { value: 'Georgia' } });
 
       expect(onStyleChange).toHaveBeenCalledWith({
+        subtitlesEnabled: DEFAULT_TEXT_STYLE.subtitlesEnabled,
         fontFamily: 'Georgia',
         fontSize: DEFAULT_TEXT_STYLE.fontSize,
         textColor: DEFAULT_TEXT_STYLE.textColor,

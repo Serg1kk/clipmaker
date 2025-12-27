@@ -478,14 +478,97 @@ Choose a frame layout for your final clip.
 
 ---
 
+### Template Layouts & Frame Proportions
+
+All templates output in **9:16 portrait aspect ratio** (1080×1920 pixels) optimized for TikTok, Reels, and Shorts.
+
+```
+┌────────────────────────────────────────────────────────────────────────────────┐
+│                         TEMPLATE LAYOUT SPECIFICATIONS                          │
+├────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                        │
+│  │             │    │  Frame 1    │    │ Fr.1 │ Fr.2 │ ◄── 40% height         │
+│  │             │    │─────────────│    │      │      │     (768px each)       │
+│  │   Frame 1   │    │  50% each   │    ├──────┴──────┤                        │
+│  │   (100%)    │    │  (960px)    │    │             │                        │
+│  │             │    │─────────────│    │   Frame 3   │ ◄── 60% height         │
+│  │             │    │  Frame 2    │    │   (1152px)  │                        │
+│  │             │    │             │    │             │                        │
+│  └─────────────┘    └─────────────┘    └─────────────┘                        │
+│   1-FRAME            2-FRAME            3-FRAME                               │
+│   1080×1920          1080×960 each      540×768 (top)                         │
+│   (full screen)      (stacked)          1080×1152 (bottom)                    │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Detailed Frame Dimensions:**
+
+| Template | Frame | Position | Dimensions | Aspect Ratio |
+|----------|-------|----------|------------|--------------|
+| **1-Frame** | Frame 1 | Full screen | 1080×1920 | 9:16 (0.5625) |
+| **2-Frame** | Frame 1 | Top half | 1080×960 | 9:8 (1.125) |
+| **2-Frame** | Frame 2 | Bottom half | 1080×960 | 9:8 (1.125) |
+| **3-Frame** | Frame 1 | Top-left | 540×768 | ~0.703 |
+| **3-Frame** | Frame 2 | Top-right | 540×768 | ~0.703 |
+| **3-Frame** | Frame 3 | Bottom full | 1080×1152 | 0.9375 |
+
+**Frame Cropping:**
+- Each frame has an interactive crop rectangle in the source video
+- Drag crop areas to select which part of your video appears in each frame
+- Crop rectangles maintain the target aspect ratio for each frame position
+- The Preview panel shows exactly how crops will appear in the final output
+
+---
+
+### Understanding the Preview Panel
+
+The **Preview Panel** displays a real-time 9:16 vertical preview showing exactly how your final clip will look.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  PREVIEW PANEL (9:16 Portrait Output)                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌───────────────────────────────────┐                          │
+│  │                                   │                          │
+│  │    Real-time preview of your      │                          │
+│  │    cropped frames positioned      │                          │
+│  │    according to template          │                          │
+│  │                                   │                          │
+│  │  ┌─────────────────────────────┐  │                          │
+│  │  │     Subtitle Preview        │  │ ◄── Shows text styling   │
+│  │  └─────────────────────────────┘  │                          │
+│  │                           [9:16]  │ ◄── Aspect ratio badge   │
+│  └───────────────────────────────────┘                          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Preview Features:**
+- **Live Updates**: Preview updates instantly as you drag crop areas
+- **Accurate Positioning**: Shows exact frame placement per template layout
+- **Subtitle Overlay**: Displays styled subtitles in their final position
+- **Aspect Ratio Badge**: Confirms 9:16 output format
+- **Responsive Width**: Scales to fit your editor while maintaining proportions
+
+**What You See Is What You Get:**
+The preview exactly matches the final rendered clip - frame positions, crop selections, and subtitle styling are all rendered identically in the output.
+
+---
+
 ### Step 7: Configuring Subtitles
 
-Customize how subtitles appear on your clip.
+Customize how subtitles appear on your clip with the Text Styling Panel.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  TEXT STYLING PANEL                                             │
 ├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Enable Subtitles                                    [══●]     │ ◄── Toggle ON/OFF
+│  ─────────────────────────────────────────────────────────────  │
 │                                                                 │
 │  Font Family                                                    │
 │  ┌─────────────────────────────────────────────────────────┐   │
@@ -518,20 +601,57 @@ Customize how subtitles appear on your clip.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Subtitle Options:**
+#### Subtitle Toggle
+
+The **Enable Subtitles** toggle at the top of the panel controls whether subtitles appear in your final clip:
+
+| State | Description |
+|-------|-------------|
+| **ON** (blue) | Subtitles will be rendered on the video with your styling |
+| **OFF** (gray) | Video renders without any subtitle overlay |
+
+When disabled, all styling options remain visible but won't affect the output.
+
+#### Subtitle Styling Options
 
 | Option | Values | Description |
 |--------|--------|-------------|
-| **Font Family** | Arial, Helvetica, Roboto, Impact, etc. | 10 font choices |
-| **Font Size** | 12px - 72px | Slider for precise control |
-| **Text Color** | Preset palette + custom hex | Click to select |
-| **Position** | Top, Center, Bottom | Vertical placement |
+| **Enable Subtitles** | Toggle ON/OFF | Show or hide subtitles in final clip |
+| **Font Family** | Arial, Helvetica, Roboto, Georgia, Verdana, Trebuchet MS, Times New Roman, Courier New, Impact, Open Sans | 10 font choices across sans-serif, serif, monospace, and display categories |
+| **Font Size** | 12px - 72px | Slider with live px value display |
+| **Text Color** | Preset palette + custom hex | Click color swatches or enter hex code |
+| **Position** | Top, Center, Bottom | Vertical placement on screen |
+
+#### Text Position Options
+
+```
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                      SUBTITLE POSITIONING OPTIONS                              │
+├───────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐                     │
+│  │  Subtitles  │     │             │     │             │                     │
+│  │   HERE      │     │  Subtitles  │     │             │                     │
+│  │             │     │   HERE      │     │  Subtitles  │                     │
+│  │             │     │             │     │   HERE      │                     │
+│  └─────────────┘     └─────────────┘     └─────────────┘                     │
+│      TOP                CENTER              BOTTOM                            │
+│                                                                               │
+│  Best for:           Best for:           Best for:                           │
+│  - Lower thirds      - Centered quotes    - Standard captions                │
+│  - News-style        - Lyric videos       - Social media clips               │
+│  - Speaker IDs       - Emphasis text      - TikTok/Reels/Shorts              │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
 
 **Pro Tips:**
 - Use **Impact** for bold, attention-grabbing captions
 - **32-48px** works well for most vertical clips
-- **White with black outline** is most readable
-- **Bottom** position is standard for short-form
+- **White** is most readable against video backgrounds
+- **Bottom** position is the standard for short-form social content
+- **Center** works great for quote-style content or music lyrics
+- Toggle subtitles **OFF** if your video already has burned-in captions
 
 ---
 

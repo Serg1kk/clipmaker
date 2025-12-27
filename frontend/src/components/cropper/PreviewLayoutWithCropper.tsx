@@ -3,6 +3,7 @@ import TemplateSelector, { TemplateType } from '../TemplateSelector';
 import VideoFrameCropper from './VideoFrameCropper';
 import PreviewLayout from './PreviewLayout';
 import { CropCoordinates, NormalizedCropCoordinates } from './types';
+import { TextStyle } from '../TextStylingPanel';
 
 /**
  * Props for the PreviewLayoutWithCropper component
@@ -28,6 +29,10 @@ export interface PreviewLayoutWithCropperProps {
   showFrameBorders?: boolean;
   /** Optional CSS class */
   className?: string;
+  /** Text styling configuration for subtitle overlay */
+  textStyle?: TextStyle;
+  /** Sample subtitle text to display */
+  subtitleText?: string;
 }
 
 /**
@@ -62,7 +67,9 @@ const PreviewLayoutWithCropper = ({
   onTemplateChange,
   showCoordinates = false,
   showFrameBorders = false,
-  className = ''
+  className = '',
+  textStyle,
+  subtitleText
 }: PreviewLayoutWithCropperProps) => {
   const [template, setTemplate] = useState<TemplateType>(initialTemplate);
   const [normalizedCoordinates, setNormalizedCoordinates] = useState<NormalizedCropCoordinates[]>([]);
@@ -129,6 +136,8 @@ const PreviewLayoutWithCropper = ({
             normalizedCoordinates={normalizedCoordinates}
             width={previewWidth}
             showFrameBorders={showFrameBorders}
+            textStyle={textStyle}
+            subtitleText={subtitleText}
           />
         </div>
       </div>

@@ -36,6 +36,8 @@ export interface FontOption {
  * Complete text styling configuration
  */
 export interface TextStyle {
+  /** Whether subtitles are enabled */
+  subtitlesEnabled: boolean;
   /** Font family for the text */
   fontFamily: FontFamily;
   /** Font size in pixels (12-72) */
@@ -80,10 +82,11 @@ export const FONT_OPTIONS: FontOption[] = [
  * Default text style values
  */
 export const DEFAULT_TEXT_STYLE: TextStyle = {
+  subtitlesEnabled: true,
   fontFamily: 'Arial',
   fontSize: 24,
   textColor: '#FFFFFF',
-  position: 'bottom',
+  position: 'center',
 };
 
 /**
@@ -174,6 +177,43 @@ const TextStylingPanel = ({
       aria-label="Text styling controls"
       data-testid="text-styling-panel"
     >
+      {/* Enable Subtitles Toggle */}
+      <div className="flex items-center justify-between pb-2 border-b border-gray-700">
+        <label
+          htmlFor="subtitles-enabled-toggle"
+          className="text-sm font-medium text-gray-300"
+        >
+          Enable Subtitles
+        </label>
+        <button
+          type="button"
+          role="switch"
+          id="subtitles-enabled-toggle"
+          aria-checked={style.subtitlesEnabled}
+          onClick={() => updateStyle('subtitlesEnabled', !style.subtitlesEnabled)}
+          disabled={disabled}
+          className={`
+            relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer
+            rounded-full border-2 border-transparent
+            transition-colors duration-200 ease-in-out
+            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900
+            ${style.subtitlesEnabled ? 'bg-blue-600' : 'bg-gray-600'}
+            ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+          `}
+          data-testid="subtitles-enabled-toggle"
+        >
+          <span className="sr-only">Enable subtitles</span>
+          <span
+            aria-hidden="true"
+            className={`
+              pointer-events-none inline-block h-5 w-5 transform rounded-full
+              bg-white shadow ring-0 transition duration-200 ease-in-out
+              ${style.subtitlesEnabled ? 'translate-x-5' : 'translate-x-0'}
+            `}
+          />
+        </button>
+      </div>
+
       {/* Font Family Dropdown */}
       <div className="space-y-1.5">
         <label
@@ -315,7 +355,7 @@ const TextStylingPanel = ({
 
       {/* Screen reader announcement */}
       <div className="sr-only" aria-live="polite" data-testid="style-announcement">
-        {`Style: ${style.fontFamily}, ${style.fontSize}px, ${style.textColor}, ${style.position}`}
+        {`Subtitles ${style.subtitlesEnabled ? 'enabled' : 'disabled'}, Style: ${style.fontFamily}, ${style.fontSize}px, ${style.textColor}, ${style.position}`}
       </div>
     </div>
   );

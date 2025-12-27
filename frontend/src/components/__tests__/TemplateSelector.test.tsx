@@ -213,15 +213,15 @@ describe('TemplateSelector', () => {
 
       expect(screen.getByTestId('template-button-1-frame')).toHaveAttribute(
         'aria-label',
-        'Single Frame: One video frame layout'
+        'Single Frame: Full screen 1080x1920 layout'
       );
       expect(screen.getByTestId('template-button-2-frame')).toHaveAttribute(
         'aria-label',
-        'Two Frames: Side-by-side dual frame layout'
+        'Two Frames: Two frames stacked vertically (9:8 each)'
       );
       expect(screen.getByTestId('template-button-3-frame')).toHaveAttribute(
         'aria-label',
-        'Three Frames: Triple frame layout'
+        'Three Frames: Two on top, one large below'
       );
     });
 

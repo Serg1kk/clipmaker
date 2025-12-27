@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { TemplateType } from '../TemplateSelector';
 import { NormalizedCropCoordinates } from './types';
+import SubtitlePreviewOverlay from './SubtitlePreviewOverlay';
+import { TextStyle } from '../TextStylingPanel';
 
 /**
  * Layout configuration for each template in 9:16 preview
@@ -18,6 +20,12 @@ interface PreviewFramePosition {
 
 /**
  * Template layout configurations for 9:16 vertical preview
+ *
+ * Layout specifications:
+ * - 1-frame: Single full-height frame (100% height)
+ * - 2-frame: Two frames stacked vertically (50% height each)
+ * - 3-frame: Two frames side-by-side on top (40% total height, 50% width each)
+ *            plus one frame below (60% height, full width)
  */
 const PREVIEW_LAYOUTS: Record<TemplateType, PreviewFramePosition[]> = {
   '1-frame': [
@@ -28,9 +36,12 @@ const PREVIEW_LAYOUTS: Record<TemplateType, PreviewFramePosition[]> = {
     { x: 0, y: 0.5, width: 1, height: 0.5 }
   ],
   '3-frame': [
-    { x: 0, y: 0, width: 1, height: 0.35 },
-    { x: 0, y: 0.35, width: 1, height: 0.35 },
-    { x: 0, y: 0.7, width: 1, height: 0.3 }
+    // Top-left: 50% width, 40% height
+    { x: 0, y: 0, width: 0.5, height: 0.4 },
+    // Top-right: 50% width, 40% height
+    { x: 0.5, y: 0, width: 0.5, height: 0.4 },
+    // Bottom: full width, 60% height
+    { x: 0, y: 0.4, width: 1, height: 0.6 }
   ]
 };
 
@@ -54,6 +65,10 @@ export interface PreviewLayoutProps {
   showFrameBorders?: boolean;
   /** Background color for empty areas */
   backgroundColor?: string;
+  /** Text styling configuration for subtitle overlay */
+  textStyle?: TextStyle;
+  /** Sample subtitle text to display */
+  subtitleText?: string;
 }
 
 /**
@@ -126,7 +141,9 @@ const PreviewLayout = ({
   width = 270,
   className = '',
   showFrameBorders = false,
-  backgroundColor = '#000'
+  backgroundColor = '#000',
+  textStyle,
+  subtitleText = 'Sample Subtitle'
 }: PreviewLayoutProps) => {
   // Calculate height for 9:16 aspect ratio
   const height = Math.round(width * (16 / 9));
@@ -215,6 +232,18 @@ const PreviewLayout = ({
           </div>
         );
       })}
+
+      {/* Subtitle Preview Overlay */}
+      {textStyle && (
+        <SubtitlePreviewOverlay
+          enabled={textStyle.subtitlesEnabled}
+          fontFamily={textStyle.fontFamily}
+          fontSize={textStyle.fontSize}
+          textColor={textStyle.textColor}
+          position={textStyle.position}
+          sampleText={subtitleText}
+        />
+      )}
 
       {/* Aspect ratio indicator */}
       <div

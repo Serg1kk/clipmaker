@@ -24,10 +24,11 @@ const CropperDemo = () => {
   const [coordinates, setCoordinates] = useState<CropCoordinates[]>([]);
   const [normalizedCoords, setNormalizedCoords] = useState<NormalizedCropCoordinates[]>([]);
   const [textStyle, setTextStyle] = useState<TextStyle>({
+    subtitlesEnabled: true,
     fontFamily: 'Arial',
     fontSize: 24,
     textColor: '#FFFFFF',
-    position: 'bottom',
+    position: 'center',
   });
 
   return (
@@ -62,6 +63,8 @@ const CropperDemo = () => {
               console.log('Normalized:', n);
               setNormalizedCoords(n);
             }}
+            textStyle={textStyle}
+            subtitleText="Sample Subtitle"
           />
         </div>
 
@@ -91,6 +94,12 @@ const CropperDemo = () => {
           <div>
             <span className="text-gray-400">Crop areas:</span>
             <span className="text-white ml-2">{coordinates.length}</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Subtitles:</span>
+            <span className={`ml-2 ${textStyle.subtitlesEnabled ? 'text-green-400' : 'text-gray-500'}`}>
+              {textStyle.subtitlesEnabled ? 'On' : 'Off'}
+            </span>
           </div>
           <div>
             <span className="text-gray-400">Font:</span>

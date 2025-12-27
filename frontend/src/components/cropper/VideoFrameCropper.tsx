@@ -5,25 +5,33 @@ import {
   CropCoordinates,
   NormalizedCropCoordinates,
   getTemplateConfig,
-  getRectangleColor
+  getRectangleColor,
+  generateDefaultCropAreas,
 } from './types';
+import { TemplateType } from '../TemplateSelector';
 
 /**
  * Generate initial coordinates based on template and container size
+ * Uses the new generateDefaultCropAreas for aspect-ratio-aware positioning
  */
 function generateInitialCoordinates(
   template: string,
   containerWidth: number,
   containerHeight: number
 ): CropCoordinates[] {
-  const config = getTemplateConfig(template as '1-frame' | '2-frame' | '3-frame');
+  // Use the new aspect-ratio-aware crop area generator
+  const cropAreas = generateDefaultCropAreas(
+    template as TemplateType,
+    containerWidth,
+    containerHeight
+  );
 
-  return config.defaultPositions.map((pos, index) => ({
+  return cropAreas.map((area, index) => ({
     id: `crop-${index + 1}`,
-    x: Math.round(pos.x * containerWidth),
-    y: Math.round(pos.y * containerHeight),
-    width: Math.round(pos.width * containerWidth),
-    height: Math.round(pos.height * containerHeight)
+    x: Math.round(area.x * containerWidth),
+    y: Math.round(area.y * containerHeight),
+    width: Math.round(area.width * containerWidth),
+    height: Math.round(area.height * containerHeight),
   }));
 }
 

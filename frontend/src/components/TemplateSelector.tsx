@@ -30,61 +30,74 @@ export interface TemplateSelectorProps {
 
 /**
  * Available templates configuration
+ * Updated descriptions to match new layouts for 9:16 portrait output
  */
 const TEMPLATES: TemplateConfig[] = [
-  { id: '1-frame', label: 'Single Frame', description: 'One video frame layout' },
-  { id: '2-frame', label: 'Two Frames', description: 'Side-by-side dual frame layout' },
-  { id: '3-frame', label: 'Three Frames', description: 'Triple frame layout' },
+  { id: '1-frame', label: 'Single Frame', description: 'Full screen 1080x1920 layout' },
+  { id: '2-frame', label: 'Two Frames', description: 'Two frames stacked vertically (9:8 each)' },
+  { id: '3-frame', label: 'Three Frames', description: 'Two on top, one large below' },
 ];
 
 /**
  * Icon component for 1-frame layout
+ * Single vertical 9:16 rectangle
  */
 const OneFrameIcon = ({ className = '' }: { className?: string }) => (
   <svg
     className={className}
-    viewBox="0 0 40 30"
+    viewBox="0 0 24 40"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     aria-hidden="true"
   >
-    <rect x="2" y="2" width="36" height="26" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
-    <rect x="6" y="6" width="28" height="18" rx="1" fill="currentColor" opacity="0.3" />
+    {/* Outer border - vertical 9:16 rectangle */}
+    <rect x="2" y="2" width="20" height="36" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+    {/* Inner fill - single frame */}
+    <rect x="4" y="4" width="16" height="32" rx="1" fill="currentColor" opacity="0.3" />
   </svg>
 );
 
 /**
  * Icon component for 2-frame layout
+ * Vertical 9:16 rectangle divided horizontally into 2 stacked parts
  */
 const TwoFrameIcon = ({ className = '' }: { className?: string }) => (
   <svg
     className={className}
-    viewBox="0 0 40 30"
+    viewBox="0 0 24 40"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     aria-hidden="true"
   >
-    <rect x="2" y="2" width="36" height="26" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
-    <rect x="4" y="6" width="14" height="18" rx="1" fill="currentColor" opacity="0.3" />
-    <rect x="22" y="6" width="14" height="18" rx="1" fill="currentColor" opacity="0.3" />
+    {/* Outer border - vertical 9:16 rectangle */}
+    <rect x="2" y="2" width="20" height="36" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+    {/* Top frame - 50% height */}
+    <rect x="4" y="4" width="16" height="15" rx="1" fill="currentColor" opacity="0.3" />
+    {/* Bottom frame - 50% height */}
+    <rect x="4" y="21" width="16" height="15" rx="1" fill="currentColor" opacity="0.3" />
   </svg>
 );
 
 /**
  * Icon component for 3-frame layout
+ * Vertical 9:16 rectangle with 2 small squares on top row and 1 wide rectangle below
  */
 const ThreeFrameIcon = ({ className = '' }: { className?: string }) => (
   <svg
     className={className}
-    viewBox="0 0 40 30"
+    viewBox="0 0 24 40"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     aria-hidden="true"
   >
-    <rect x="2" y="2" width="36" height="26" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
-    <rect x="4" y="6" width="9" height="18" rx="1" fill="currentColor" opacity="0.3" />
-    <rect x="15" y="6" width="10" height="18" rx="1" fill="currentColor" opacity="0.3" />
-    <rect x="27" y="6" width="9" height="18" rx="1" fill="currentColor" opacity="0.3" />
+    {/* Outer border - vertical 9:16 rectangle */}
+    <rect x="2" y="2" width="20" height="36" rx="2" stroke="currentColor" strokeWidth="2" fill="none" />
+    {/* Top-left frame: small square for speaker */}
+    <rect x="4" y="4" width="7" height="7" rx="1" fill="currentColor" opacity="0.3" />
+    {/* Top-right frame: small square for speaker */}
+    <rect x="13" y="4" width="7" height="7" rx="1" fill="currentColor" opacity="0.3" />
+    {/* Bottom frame: wide horizontal rectangle for screen/presentation */}
+    <rect x="4" y="13" width="16" height="23" rx="1" fill="currentColor" opacity="0.3" />
   </svg>
 );
 

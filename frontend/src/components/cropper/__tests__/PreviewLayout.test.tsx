@@ -160,6 +160,57 @@ describe('PreviewLayout', () => {
       expect(frame1).toHaveStyle({ top: '0px' });
       expect(frame2).toHaveStyle({ top: `${halfHeight}px` });
     });
+
+    it('positions 3-frame with 2 top side-by-side (40%) + 1 bottom (60%)', () => {
+      const width = 270;
+      const height = Math.round(width * (16 / 9));
+      const halfWidth = width * 0.5;
+      const topHeight = height * 0.4;
+      const bottomHeight = height * 0.6;
+
+      const threeCoords: NormalizedCropCoordinates[] = [
+        { id: 'crop-1', x: 0.1, y: 0.1, width: 0.4, height: 0.8 },
+        { id: 'crop-2', x: 0.5, y: 0.1, width: 0.4, height: 0.8 },
+        { id: 'crop-3', x: 0.3, y: 0.3, width: 0.3, height: 0.6 }
+      ];
+
+      render(
+        <PreviewLayout
+          src={mockSrc}
+          template="3-frame"
+          normalizedCoordinates={threeCoords}
+          width={width}
+        />
+      );
+
+      const frame1 = screen.getByTestId('preview-frame-0');
+      const frame2 = screen.getByTestId('preview-frame-1');
+      const frame3 = screen.getByTestId('preview-frame-2');
+
+      // Top-left frame: 0,0 with 50% width, 40% height
+      expect(frame1).toHaveStyle({
+        left: '0px',
+        top: '0px',
+        width: `${halfWidth}px`,
+        height: `${topHeight}px`
+      });
+
+      // Top-right frame: 50% left, 0 top with 50% width, 40% height
+      expect(frame2).toHaveStyle({
+        left: `${halfWidth}px`,
+        top: '0px',
+        width: `${halfWidth}px`,
+        height: `${topHeight}px`
+      });
+
+      // Bottom frame: 0 left, 40% top with 100% width, 60% height
+      expect(frame3).toHaveStyle({
+        left: '0px',
+        top: `${topHeight}px`,
+        width: `${width}px`,
+        height: `${bottomHeight}px`
+      });
+    });
   });
 
   describe('crop visualization', () => {
