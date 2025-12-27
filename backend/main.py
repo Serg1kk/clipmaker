@@ -325,12 +325,27 @@ async def process_transcription(job_id: str) -> None:
         )
         logger.info(f"Loading Whisper model: {WHISPER_MODEL}")
 
-        # Simple progress callback for Whisper (no async - just update job state)
+        # Progress callback for Whisper - sends WebSocket updates with model name
+        last_whisper_progress = 25.0
+
         def on_whisper_progress(progress: float, message: str) -> None:
+            nonlocal last_whisper_progress
             # Map Whisper progress (0-100) to our progress (25-90)
             mapped_progress = 25.0 + (progress * 0.65)
             job.progress = mapped_progress
             job.updated_at = datetime.utcnow()
+
+            # Send WebSocket update every 5% or when message changes
+            if mapped_progress - last_whisper_progress >= 5.0 or progress >= 99:
+                last_whisper_progress = mapped_progress
+                # Include model name in progress message
+                progress_msg = f"Transcribing with {WHISPER_MODEL} model... {int(progress)}%"
+                asyncio.create_task(tracker.update_progress(
+                    stage=ProgressStage.TRANSCRIBING,
+                    progress=mapped_progress,
+                    message=progress_msg,
+                    current_step=2,
+                ))
 
         # Run transcription with word-level timestamps
         transcription_result: TranscriptionResult = whisper_service.transcribe_with_word_timestamps(
