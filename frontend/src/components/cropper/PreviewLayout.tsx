@@ -1,8 +1,9 @@
 import { useMemo, RefObject } from 'react';
 import { TemplateType } from '../TemplateSelector';
 import { NormalizedCropCoordinates } from './types';
-import SubtitlePreviewOverlay from './SubtitlePreviewOverlay';
-import { TextStyle } from '../TextStylingPanel';
+import SubtitleOverlay from '../subtitle/SubtitleOverlay';
+import type { SubtitleLine } from '../subtitle/types';
+import { TextStyle, FONT_OPTIONS } from '../TextStylingPanel';
 import CroppedFrameCanvas from './CroppedFrameCanvas';
 
 /**
@@ -68,8 +69,8 @@ export interface PreviewLayoutProps {
   backgroundColor?: string;
   /** Text styling configuration for subtitle overlay */
   textStyle?: TextStyle;
-  /** Sample subtitle text to display */
-  subtitleText?: string;
+  /** Subtitle lines with word-level timing for synchronized display */
+  subtitleLines?: SubtitleLine[];
   /** Reference to the main video player for synchronization */
   mainVideoRef?: RefObject<HTMLVideoElement>;
   /** Current playback time in seconds (for external sync control) */
@@ -148,9 +149,9 @@ const PreviewLayout = ({
   showFrameBorders = false,
   backgroundColor = '#000',
   textStyle,
-  subtitleText = 'Sample Subtitle',
+  subtitleLines = [],
   mainVideoRef,
-  currentTime
+  currentTime = 0
 }: PreviewLayoutProps) => {
   // Calculate height for 9:16 aspect ratio
   const height = Math.round(width * (16 / 9));
@@ -272,15 +273,20 @@ const PreviewLayout = ({
         );
       })}
 
-      {/* Subtitle Preview Overlay */}
-      {textStyle && (
-        <SubtitlePreviewOverlay
-          enabled={textStyle.subtitlesEnabled}
-          fontFamily={textStyle.fontFamily}
-          fontSize={textStyle.fontSize}
-          textColor={textStyle.textColor}
-          position={textStyle.position}
-          sampleText={subtitleText}
+      {/* Subtitle Overlay - synced with real transcription words */}
+      {textStyle?.subtitlesEnabled && subtitleLines.length > 0 && (
+        <SubtitleOverlay
+          lines={subtitleLines}
+          currentTime={currentTime}
+          style={{
+            fontFamily: FONT_OPTIONS.find(f => f.id === textStyle.fontFamily)?.value || 'Arial, sans-serif',
+            fontSize: Math.max(10, Math.round(textStyle.fontSize * 0.35)), // Scale for small preview
+            textColor: textStyle.textColor,
+            highlightColor: textStyle.textColor, // Same color for word-by-word display
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            position: textStyle.position,
+          }}
+          className="z-20"
         />
       )}
 

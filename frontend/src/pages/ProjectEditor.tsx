@@ -30,9 +30,8 @@ import PreviewLayout from '../components/cropper/PreviewLayout';
 import CropOverlay from '../components/cropper/CropOverlay';
 import CropSettings from '../components/cropper/CropSettings';
 import VideoPlayControls from '../components/cropper/VideoPlayControls';
-import SubtitleOverlay from '../components/subtitle/SubtitleOverlay';
 import type { SubtitleLine } from '../components/subtitle/types';
-import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE, FontFamily, TextPosition, FONT_OPTIONS } from '../components/TextStylingPanel';
+import TextStylingPanel, { TextStyle, DEFAULT_TEXT_STYLE, FontFamily, TextPosition } from '../components/TextStylingPanel';
 import { TimelineMarker, TimeRange, engagingMomentToMarker } from '../components/timeline/types';
 import type { VideoFileMetadata } from '../services/api';
 import type { NormalizedCropCoordinates } from '../components/cropper/types';
@@ -74,6 +73,44 @@ function loadCropFromCache(projectId: string, template: TemplateType): Normalize
     }
   } catch (e) {
     console.warn('Failed to load crop from cache:', e);
+  }
+  return null;
+}
+
+// LocalStorage cache for subtitle settings per-project
+interface SubtitleCacheValue {
+  style: TextStyle;
+  updatedAt: number;
+}
+
+// Save subtitle settings to localStorage cache per-project
+function saveSubtitleToCache(projectId: string, style: TextStyle): void {
+  if (!projectId) return;
+  const key = `subtitle-cache-${projectId}`;
+  const value: SubtitleCacheValue = {
+    style,
+    updatedAt: Date.now(),
+  };
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn('Failed to save subtitle to cache:', e);
+  }
+}
+
+// Load subtitle settings from localStorage cache per-project
+function loadSubtitleFromCache(projectId: string): TextStyle | null {
+  if (!projectId) return null;
+  const key = `subtitle-cache-${projectId}`;
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) return null;
+    const parsed: SubtitleCacheValue = JSON.parse(stored);
+    if (parsed.style) {
+      return parsed.style;
+    }
+  } catch (e) {
+    console.warn('Failed to load subtitle from cache:', e);
   }
   return null;
 }
@@ -182,7 +219,7 @@ const ProjectEditor = () => {
           setCropCoordinates(savedMoment.crop_coordinates as NormalizedCropCoordinates[]);
         }
 
-        // Restore subtitle settings
+        // Restore subtitle settings: moment config > localStorage cache
         if (savedMoment.subtitle_config) {
           const cfg = savedMoment.subtitle_config as Record<string, unknown>;
           setTextStyle({
@@ -192,10 +229,25 @@ const ProjectEditor = () => {
             textColor: cfg.text_color as string ?? DEFAULT_TEXT_STYLE.textColor,
             position: (cfg.position as TextPosition) ?? DEFAULT_TEXT_STYLE.position,
           });
+        } else if (projectId) {
+          // Try localStorage cache for project-wide subtitle settings
+          const cachedStyle = loadSubtitleFromCache(projectId);
+          if (cachedStyle) {
+            setTextStyle(cachedStyle);
+          }
         }
       }
     }
-  }, [project?.moments, project?.current_moment_id, selectedMomentId]);
+  }, [project?.moments, project?.current_moment_id, selectedMomentId, projectId]);
+
+  // Load subtitle settings from localStorage on initial project load (no moment selected yet)
+  useEffect(() => {
+    if (!projectId || selectedMomentId) return; // Only run when no moment selected
+    const cachedStyle = loadSubtitleFromCache(projectId);
+    if (cachedStyle) {
+      setTextStyle(cachedStyle);
+    }
+  }, [projectId, selectedMomentId]);
 
   // Convert project moments to timeline markers
   const timelineMarkers = useMemo((): TimelineMarker[] => {
@@ -718,7 +770,7 @@ const ProjectEditor = () => {
           // If no cache either, keep current coordinates (don't reset to empty)
         }
 
-        // Restore subtitle settings
+        // Restore subtitle settings: moment config > localStorage cache > default
         if (moment.subtitle_config) {
           const cfg = moment.subtitle_config as Record<string, unknown>;
           setTextStyle({
@@ -728,8 +780,13 @@ const ProjectEditor = () => {
             textColor: cfg.text_color as string ?? DEFAULT_TEXT_STYLE.textColor,
             position: (cfg.position as TextPosition) ?? DEFAULT_TEXT_STYLE.position,
           });
-        } else {
-          setTextStyle(DEFAULT_TEXT_STYLE);
+        } else if (projectId) {
+          // Try localStorage cache for project-wide subtitle settings
+          const cachedStyle = loadSubtitleFromCache(projectId);
+          if (cachedStyle) {
+            setTextStyle(cachedStyle);
+          }
+          // If no cache, keep current settings (don't reset)
         }
       }
 
@@ -874,13 +931,20 @@ const ProjectEditor = () => {
 
   const debouncedSaveSubtitle = useDebouncedCallback(saveSubtitleToBackend, 500);
 
-  // Handle subtitle style change with debouncing
+  // Handle subtitle style change with debouncing and localStorage cache
   const handleStyleChange = useCallback((style: TextStyle) => {
     setTextStyle(style);
 
-    if (!selectedMomentId) return;
-    debouncedSaveSubtitle(style, selectedMomentId);
-  }, [selectedMomentId, debouncedSaveSubtitle]);
+    // Always save to localStorage for project-wide persistence
+    if (projectId) {
+      saveSubtitleToCache(projectId, style);
+    }
+
+    // Also save to moment if one is selected
+    if (selectedMomentId) {
+      debouncedSaveSubtitle(style, selectedMomentId);
+    }
+  }, [projectId, selectedMomentId, debouncedSaveSubtitle]);
 
   // Video URL helper
   const getVideoUrl = (videoPath: string): string => {
@@ -1015,22 +1079,6 @@ const ProjectEditor = () => {
                   videoRef={videoRef as React.RefObject<HTMLVideoElement>}
                   videoDimensions={sourceVideoDimensions || undefined}
                 />
-                {/* Subtitle Preview on Source Video - synced with real transcription words */}
-                {textStyle.subtitlesEnabled && subtitleLines.length > 0 && (
-                  <SubtitleOverlay
-                    lines={subtitleLines}
-                    currentTime={currentTime}
-                    style={{
-                      fontFamily: FONT_OPTIONS.find(f => f.id === textStyle.fontFamily)?.value || 'Arial, sans-serif',
-                      fontSize: Math.max(12, Math.round(textStyle.fontSize * 0.5)), // Scale for preview
-                      textColor: textStyle.textColor,
-                      highlightColor: textStyle.textColor, // Same color, word-by-word display
-                      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                      position: textStyle.position,
-                    }}
-                    className="z-20"
-                  />
-                )}
               </div>
             </div>
 
@@ -1138,7 +1186,7 @@ const ProjectEditor = () => {
                   normalizedCoordinates={cropCoordinates}
                   width={180}
                   textStyle={textStyle}
-                  subtitleText={(selectedMoment?.text ?? '').slice(0, 50) || 'Sample subtitle'}
+                  subtitleLines={subtitleLines}
                   mainVideoRef={videoRef}
                   currentTime={currentTime}
                 />
