@@ -244,14 +244,15 @@ const ProjectEditor = () => {
     }
   }, [project?.moments, project?.current_moment_id, selectedMomentId]);
 
-  // Load subtitle settings from localStorage on initial project load (no moment selected yet)
+  // Load subtitle settings from localStorage on initial project load
   useEffect(() => {
-    if (!projectId || selectedMomentId) return; // Only run when no moment selected
+    if (!projectId) return;
     const cachedStyle = loadSubtitleFromCache(projectId);
     if (cachedStyle) {
       setTextStyle(cachedStyle);
     }
-  }, [projectId, selectedMomentId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]); // Only run once when projectId changes (project load)
 
   // Load template and its crop coordinates from localStorage on initial project load
   useEffect(() => {
@@ -771,10 +772,9 @@ const ProjectEditor = () => {
         end: marker.endTime ?? 0
       });
 
-      // Load settings - template NEVER changes when switching moments!
-      // Only load crop coordinates for the CURRENT selected template
+      // Load crop coordinates for the CURRENT selected template
+      // Template and subtitle settings NEVER change when switching moments!
       if (projectId) {
-        // Template stays the same (cropTemplate) - never change it on moment switch
         // Load crop coordinates from localStorage cache for current template
         const cachedCoords = loadCropFromCache(projectId, cropTemplate);
         if (cachedCoords) {
@@ -782,13 +782,8 @@ const ProjectEditor = () => {
         }
         // If no cache, keep current coordinates (don't reset to empty)
 
-        // Subtitle settings: load from project-wide localStorage cache
-        // (subtitle settings are per-project, not per-moment)
-        const cachedStyle = loadSubtitleFromCache(projectId);
-        if (cachedStyle) {
-          setTextStyle(cachedStyle);
-        }
-        // If no cache, keep current settings (don't reset)
+        // Subtitle settings are project-wide - DO NOT change them on moment switch
+        // They persist in state and are saved to localStorage on change
       }
 
       // Save current_moment_id to project for state persistence

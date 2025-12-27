@@ -283,7 +283,7 @@ const PreviewLayout = ({
             fontSize: Math.max(10, Math.round(textStyle.fontSize * 0.35)), // Scale for small preview
             textColor: textStyle.textColor,
             highlightColor: textStyle.textColor, // Same color for word-by-word display
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: 'transparent', // No background, just text with outline
             position: textStyle.position,
           }}
           className="z-20"
