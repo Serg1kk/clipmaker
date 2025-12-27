@@ -99,3 +99,9 @@ docs/test_strategy_openrouter.md
 # Internal docs in source code
 frontend/src/hooks/*.md
 frontend/src/hooks/*.txt
+
+# ===========================================
+# Features planning docs (local development)
+# ===========================================
+docs/features/*
+!docs/features/.gitkeep
