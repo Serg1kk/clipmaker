@@ -1173,9 +1173,240 @@ class RenderProgressTracker:
         )
 
 
+# =============================================================================
+# Render Helper Functions
+# =============================================================================
+
+
+def extract_subtitle_words(
+    transcription: Optional["TranscriptionData"],
+    start_time: float,
+    end_time: float,
+) -> Optional[list[dict]]:
+    """
+    Extract words from transcription segments that fall within the moment time range.
+
+    Args:
+        transcription: TranscriptionData with segments containing word-level timestamps
+        start_time: Moment start time in seconds
+        end_time: Moment end time in seconds
+
+    Returns:
+        List of word dicts with {word, start, end} or None if no words found
+    """
+    if not transcription or not transcription.segments:
+        return None
+
+    words = []
+    for segment in transcription.segments:
+        # Skip segments that don't overlap with the moment
+        if segment.end < start_time or segment.start > end_time:
+            continue
+
+        for word_data in segment.words:
+            word_start = word_data.get("start", 0)
+            word_end = word_data.get("end", 0)
+            word_text = word_data.get("word", "")
+
+            # Include word if it overlaps with the moment range
+            if word_end > start_time and word_start < end_time:
+                words.append({
+                    "word": word_text,
+                    "start": word_start,
+                    "end": word_end,
+                })
+
+    return words if words else None
+
+
+def generate_output_path(
+    project_id: str,
+    moment_id: str,
+    filename: Optional[str] = None,
+) -> Path:
+    """
+    Generate structured output path: output/{project_id}/{moment_id}/{timestamp}/
+
+    Args:
+        project_id: Project identifier
+        moment_id: Moment identifier
+        filename: Optional output filename (auto-generated if not provided)
+
+    Returns:
+        Path to output file
+    """
+    from datetime import datetime
+
+    # Create timestamp-based subdirectory to avoid overwriting
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+
+    # Build output directory structure
+    output_dir = Path("output") / project_id / moment_id / timestamp
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate filename if not provided
+    if not filename:
+        filename = f"render_{moment_id[:8]}.mp4"
+    elif not filename.endswith(".mp4"):
+        filename += ".mp4"
+
+    return output_dir / filename
+
+
+def build_composite_request(
+    source_video_path: str,
+    crop_template: str,
+    crop_coordinates: list[dict],
+    video_width: int,
+    video_height: int,
+    moment_start: float,
+    moment_end: float,
+    output_path: str,
+) -> Optional["CompositeRequest"]:
+    """
+    Build a CompositeRequest for 2-frame or 3-frame templates.
+
+    Args:
+        source_video_path: Path to source video
+        crop_template: Template type ("1-frame", "2-frame", "3-frame")
+        crop_coordinates: List of normalized crop coordinates (0-1)
+        video_width: Source video width in pixels
+        video_height: Source video height in pixels
+        moment_start: Moment start time
+        moment_end: Moment end time
+        output_path: Output file path
+
+    Returns:
+        CompositeRequest for multi-frame templates, None for 1-frame
+    """
+    from models.composite_schemas import (
+        CompositeRequest,
+        CompositeTemplate,
+        TemplateSlot,
+        VideoSource,
+        SourceRegion,
+        ScaleMode,
+        AudioMixMode,
+    )
+
+    if crop_template == "1-frame" or not crop_coordinates:
+        return None
+
+    # Output dimensions (9:16 vertical)
+    output_width = 1080
+    output_height = 1920
+
+    # Determine slot configuration based on template
+    if crop_template == "2-frame":
+        # 2 slots stacked vertically, each 1080x960
+        slot_height = 960
+        slot_count = 2
+        slot_configs = [
+            {"slot_id": "top", "name": "Top Video", "y": 0},
+            {"slot_id": "bottom", "name": "Bottom Video", "y": 960},
+        ]
+    elif crop_template == "3-frame":
+        # 3 slots stacked vertically, each 1080x640
+        slot_height = 640
+        slot_count = 3
+        slot_configs = [
+            {"slot_id": "top", "name": "Top Video", "y": 0},
+            {"slot_id": "middle", "name": "Middle Video", "y": 640},
+            {"slot_id": "bottom", "name": "Bottom Video", "y": 1280},
+        ]
+    else:
+        return None
+
+    # Create template slots
+    slots = []
+    for cfg in slot_configs:
+        slots.append(TemplateSlot(
+            slot_id=cfg["slot_id"],
+            name=cfg["name"],
+            x=0,
+            y=cfg["y"],
+            width=output_width,
+            height=slot_height,
+            z_order=0,
+            scale_mode=ScaleMode.FILL,
+        ))
+
+    # Create template
+    template = CompositeTemplate(
+        template_id=f"tpl-{crop_template}",
+        name=f"{crop_template.replace('-', ' ').title()} Layout",
+        description=f"Auto-generated {crop_template} composite layout",
+        output_width=output_width,
+        output_height=output_height,
+        output_fps=30.0,
+        background_color="#000000",
+        slots=slots,
+    )
+
+    # Create video sources from crop coordinates
+    sources = []
+    for i, slot_cfg in enumerate(slot_configs):
+        # Get crop coordinates for this slot (use index if available, else first)
+        crop_idx = i if i < len(crop_coordinates) else 0
+        crop = crop_coordinates[crop_idx]
+
+        # Convert normalized coordinates (0-1) to pixels
+        norm_x = crop.get("x", 0)
+        norm_y = crop.get("y", 0)
+        norm_width = crop.get("width", 1)
+        norm_height = crop.get("height", 1)
+
+        crop_x = int(norm_x * video_width)
+        crop_y = int(norm_y * video_height)
+        crop_width = int(norm_width * video_width)
+        crop_height = int(norm_height * video_height)
+
+        # Create source region with crop
+        source_region = SourceRegion(
+            source_path=source_video_path,
+            crop_x=crop_x,
+            crop_y=crop_y,
+            crop_width=crop_width,
+            crop_height=crop_height,
+            start_time=moment_start,
+            end_time=moment_end,
+            source_width=video_width,
+            source_height=video_height,
+        )
+
+        # Only enable audio for the first slot to avoid duplication
+        audio_enabled = (i == 0)
+
+        sources.append(VideoSource(
+            source_id=f"src-{slot_cfg['slot_id']}",
+            source_region=source_region,
+            slot_id=slot_cfg["slot_id"],
+            audio_enabled=audio_enabled,
+            audio_volume=1.0,
+            label=slot_cfg["name"],
+        ))
+
+    # Build composite request
+    return CompositeRequest(
+        template=template,
+        sources=sources,
+        output_path=output_path,
+        audio_source=sources[0].source_id if sources else None,
+        audio_mix_mode=AudioMixMode.SINGLE,
+        output_codec="h264",
+        output_bitrate=8000,
+        output_preset="medium",
+    )
+
+
 async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
     """
     Background task to process video rendering.
+
+    Handles:
+    - Subtitle extraction from project transcription
+    - Multi-frame composite layouts (2-frame, 3-frame)
+    - Structured output paths (output/{project_id}/{moment_id}/{timestamp}/)
 
     Args:
         job_id: The unique identifier of the render job
@@ -1245,20 +1476,79 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
             current_step=1,
         )
 
-        # Build subtitle words from the moment's word indices
-        # Get words from transcription segments if available
-        subtitle_words = None
-        # Note: In production, you would load word timing from the transcription
+        # =================================================================
+        # Extract subtitle words from project transcription
+        # =================================================================
+        subtitle_words = extract_subtitle_words(
+            transcription=project.transcription,
+            start_time=moment_data.start,
+            end_time=moment_data.end,
+        )
 
-        # Build subtitle config
+        if subtitle_words:
+            logger.info(f"Extracted {len(subtitle_words)} words for subtitles")
+        else:
+            logger.info("No transcription words found for this moment")
+
+        # =================================================================
+        # Build subtitle config from moment_data (priority) or request
+        # =================================================================
         subtitle_cfg = SubtitleConfig()
-        if request.subtitle_config:
+        if moment_data.subtitle_config:
+            # Use moment-level subtitle config
+            try:
+                subtitle_cfg = SubtitleConfig(**moment_data.subtitle_config)
+                logger.info("Using subtitle config from moment data")
+            except Exception as e:
+                logger.warning(f"Invalid moment subtitle_config, using defaults: {e}")
+        elif request.subtitle_config:
+            # Fall back to request-level config
             subtitle_cfg = SubtitleConfig(**request.subtitle_config)
 
         # Build audio config
         audio_cfg = AudioConfig()
         if request.audio_config:
             audio_cfg = AudioConfig(**request.audio_config)
+
+        # =================================================================
+        # Generate structured output path
+        # =================================================================
+        output_file_path = generate_output_path(
+            project_id=request.project_id,
+            moment_id=request.moment_id,
+            filename=request.output_filename,
+        )
+        logger.info(f"Output path: {output_file_path}")
+
+        # =================================================================
+        # Get video info for composite calculations
+        # =================================================================
+        video_info = await render_service.get_video_info(source_video_path)
+        video_width = video_info.width
+        video_height = video_info.height
+        logger.info(f"Source video: {video_width}x{video_height}")
+
+        # =================================================================
+        # Build CompositeRequest for multi-frame templates
+        # =================================================================
+        composite_request = None
+        enable_composite = False
+        crop_template = moment_data.crop_template or "1-frame"
+
+        if crop_template in ("2-frame", "3-frame") and moment_data.crop_coordinates:
+            composite_request = build_composite_request(
+                source_video_path=source_video_path,
+                crop_template=crop_template,
+                crop_coordinates=moment_data.crop_coordinates,
+                video_width=video_width,
+                video_height=video_height,
+                moment_start=moment_data.start,
+                moment_end=moment_data.end,
+                output_path=str(output_file_path),
+            )
+            if composite_request:
+                enable_composite = True
+                logger.info(f"Built composite request for {crop_template} template")
 
         # Convert MomentData to TranscriptionMoment for RenderService
         # segment_id is required - default to 0 since MomentData doesn't track segments
@@ -1270,14 +1560,18 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
             segment_id=0,
         )
 
-        # Create render request
+        # =================================================================
+        # Create render request with all configurations
+        # =================================================================
         render_request = RenderRequest(
             moment=render_moment,
             source_video_path=source_video_path,
             subtitle_words=subtitle_words,
             subtitle_config=subtitle_cfg,
             audio_config=audio_cfg,
-            output_filename=request.output_filename,
+            output_filename=str(output_file_path),  # Pass full path for structured output
+            enable_composite=enable_composite,
+            composite_request=composite_request,
         )
 
         # Progress callback that updates job and broadcasts
@@ -1313,12 +1607,15 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
             progress_callback=on_render_progress,
         )
 
+        # Use the structured output path if render_service returned different path
+        final_output_path = output_file_path if output_file_path.exists() else Path(output_path)
+
         # Update job as completed
         job.status = RenderJobStatus.COMPLETED
         job.progress = 100.0
         job.current_phase = RenderProgressStage.COMPLETED.value
         job.message = "Render completed successfully"
-        job.output_path = str(output_path)
+        job.output_path = str(final_output_path)
         job.updated_at = datetime.utcnow()
 
         # Save rendered_path back to the moment in project
@@ -1327,7 +1624,7 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
             # Update the moment's rendered_path
             for m in project.moments:
                 if m.id == request.moment_id:
-                    m.rendered_path = str(output_path)
+                    m.rendered_path = str(final_output_path)
                     break
             # Save updated project
             update = ProjectUpdate(moments=project.moments)
@@ -1337,9 +1634,9 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
         except Exception as save_err:
             logger.warning(f"Failed to save rendered_path to project: {save_err}")
 
-        logger.info(f"Render completed for job {job_id}: {output_path}")
+        logger.info(f"Render completed for job {job_id}: {final_output_path}")
 
-        await tracker.complete(str(output_path))
+        await tracker.complete(str(final_output_path))
 
     except Exception as e:
         job.status = RenderJobStatus.FAILED

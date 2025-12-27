@@ -902,7 +902,18 @@ class RenderService:
 
         timeout = timeout or self.DEFAULT_TIMEOUT
         output_filename = self._generate_output_filename(request)
-        final_output_path = self.output_dir / output_filename
+
+        # Support absolute paths in output_filename (for structured output dirs)
+        if output_filename and Path(output_filename).is_absolute():
+            final_output_path = Path(output_filename)
+            # Ensure parent directory exists
+            final_output_path.parent.mkdir(parents=True, exist_ok=True)
+        elif output_filename and "/" in output_filename:
+            # Relative path with directories - treat as relative to output_dir
+            final_output_path = self.output_dir / output_filename
+            final_output_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            final_output_path = self.output_dir / output_filename
 
         # Get source video info
         video_info = await self.get_video_info(request.source_video_path)
