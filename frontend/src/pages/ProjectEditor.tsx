@@ -888,6 +888,8 @@ const ProjectEditor = () => {
                   initialCoordinates={cropCoordinates}
                   onNormalizedCropChange={handleCropChange}
                   className="pointer-events-auto"
+                  videoRef={videoRef as React.RefObject<HTMLVideoElement>}
+                  videoDimensions={sourceVideoDimensions || undefined}
                 />
                 {/* Subtitle Preview on Source Video */}
                 {textStyle.subtitlesEnabled && (

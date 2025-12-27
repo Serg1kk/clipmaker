@@ -45,8 +45,12 @@ export interface CropRectangleProps {
   id: string;
   /** Current coordinates */
   coordinates: CropCoordinates;
-  /** Container bounds for constraining movement */
-  containerBounds: { width: number; height: number };
+  /**
+   * Container bounds for constraining movement.
+   * offsetX/offsetY specify the origin point within the parent container
+   * (used when video uses object-contain and has letterboxing)
+   */
+  containerBounds: { width: number; height: number; offsetX?: number; offsetY?: number };
   /** Whether this rectangle is currently selected */
   isSelected: boolean;
   /** Callback when rectangle is selected */

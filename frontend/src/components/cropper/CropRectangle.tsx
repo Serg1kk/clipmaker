@@ -79,14 +79,24 @@ const CropRectangle = ({
 
   const colorTheme = RECTANGLE_COLORS[color];
 
-  // Handle drag events - constrain within container bounds
+  // Get offset values (for letterboxed video scenarios)
+  const offsetX = containerBounds.offsetX ?? 0;
+  const offsetY = containerBounds.offsetY ?? 0;
+
+  // Handle drag events - constrain within container bounds (accounting for offset)
   const handleDrag = useCallback(
     (_e: DraggableEvent, data: DraggableData) => {
       if (disabled || resizeState.isResizing) return;
 
-      // Constrain position to keep rectangle fully inside container
-      const constrainedX = Math.max(0, Math.min(data.x, containerBounds.width - coordinates.width));
-      const constrainedY = Math.max(0, Math.min(data.y, containerBounds.height - coordinates.height));
+      // Constrain position to keep rectangle fully inside video bounds
+      // Video bounds start at (offsetX, offsetY) and extend for (width, height)
+      const minX = offsetX;
+      const minY = offsetY;
+      const maxX = offsetX + containerBounds.width - coordinates.width;
+      const maxY = offsetY + containerBounds.height - coordinates.height;
+
+      const constrainedX = Math.max(minX, Math.min(data.x, maxX));
+      const constrainedY = Math.max(minY, Math.min(data.y, maxY));
 
       const newCoords: CropCoordinates = {
         ...coordinates,
@@ -95,7 +105,7 @@ const CropRectangle = ({
       };
       onChange(newCoords);
     },
-    [coordinates, containerBounds, onChange, disabled, resizeState.isResizing]
+    [coordinates, containerBounds, offsetX, offsetY, onChange, disabled, resizeState.isResizing]
   );
 
   // Handle resize start
@@ -249,50 +259,60 @@ const CropRectangle = ({
           }
         }
       } else {
-        // FREE-FORM RESIZE (original behavior)
+        // FREE-FORM RESIZE (with offset bounds support)
+        const resizeOffsetX = containerBounds.offsetX ?? 0;
+        const resizeOffsetY = containerBounds.offsetY ?? 0;
+        const maxResizeX = resizeOffsetX + containerBounds.width;
+        const maxResizeY = resizeOffsetY + containerBounds.height;
+
         switch (handle) {
           case 'top-left':
-            newX = Math.max(0, Math.min(startCoords.x + deltaX, startCoords.x + startCoords.width - minWidth));
-            newY = Math.max(0, Math.min(startCoords.y + deltaY, startCoords.y + startCoords.height - minHeight));
+            newX = Math.max(resizeOffsetX, Math.min(startCoords.x + deltaX, startCoords.x + startCoords.width - minWidth));
+            newY = Math.max(resizeOffsetY, Math.min(startCoords.y + deltaY, startCoords.y + startCoords.height - minHeight));
             newWidth = startCoords.width - (newX - startCoords.x);
             newHeight = startCoords.height - (newY - startCoords.y);
             break;
           case 'top-right':
-            newY = Math.max(0, Math.min(startCoords.y + deltaY, startCoords.y + startCoords.height - minHeight));
-            newWidth = Math.max(minWidth, Math.min(startCoords.width + deltaX, containerBounds.width - startCoords.x));
+            newY = Math.max(resizeOffsetY, Math.min(startCoords.y + deltaY, startCoords.y + startCoords.height - minHeight));
+            newWidth = Math.max(minWidth, Math.min(startCoords.width + deltaX, maxResizeX - startCoords.x));
             newHeight = startCoords.height - (newY - startCoords.y);
             break;
           case 'bottom-left':
-            newX = Math.max(0, Math.min(startCoords.x + deltaX, startCoords.x + startCoords.width - minWidth));
+            newX = Math.max(resizeOffsetX, Math.min(startCoords.x + deltaX, startCoords.x + startCoords.width - minWidth));
             newWidth = startCoords.width - (newX - startCoords.x);
-            newHeight = Math.max(minHeight, Math.min(startCoords.height + deltaY, containerBounds.height - startCoords.y));
+            newHeight = Math.max(minHeight, Math.min(startCoords.height + deltaY, maxResizeY - startCoords.y));
             break;
           case 'bottom-right':
-            newWidth = Math.max(minWidth, Math.min(startCoords.width + deltaX, containerBounds.width - startCoords.x));
-            newHeight = Math.max(minHeight, Math.min(startCoords.height + deltaY, containerBounds.height - startCoords.y));
+            newWidth = Math.max(minWidth, Math.min(startCoords.width + deltaX, maxResizeX - startCoords.x));
+            newHeight = Math.max(minHeight, Math.min(startCoords.height + deltaY, maxResizeY - startCoords.y));
             break;
           case 'top':
-            newY = Math.max(0, Math.min(startCoords.y + deltaY, startCoords.y + startCoords.height - minHeight));
+            newY = Math.max(resizeOffsetY, Math.min(startCoords.y + deltaY, startCoords.y + startCoords.height - minHeight));
             newHeight = startCoords.height - (newY - startCoords.y);
             break;
           case 'right':
-            newWidth = Math.max(minWidth, Math.min(startCoords.width + deltaX, containerBounds.width - startCoords.x));
+            newWidth = Math.max(minWidth, Math.min(startCoords.width + deltaX, maxResizeX - startCoords.x));
             break;
           case 'bottom':
-            newHeight = Math.max(minHeight, Math.min(startCoords.height + deltaY, containerBounds.height - startCoords.y));
+            newHeight = Math.max(minHeight, Math.min(startCoords.height + deltaY, maxResizeY - startCoords.y));
             break;
           case 'left':
-            newX = Math.max(0, Math.min(startCoords.x + deltaX, startCoords.x + startCoords.width - minWidth));
+            newX = Math.max(resizeOffsetX, Math.min(startCoords.x + deltaX, startCoords.x + startCoords.width - minWidth));
             newWidth = startCoords.width - (newX - startCoords.x);
             break;
         }
       }
 
-      // Apply container bounds constraints
-      newX = Math.max(0, Math.min(newX, containerBounds.width - newWidth));
-      newY = Math.max(0, Math.min(newY, containerBounds.height - newHeight));
-      newWidth = Math.min(newWidth, containerBounds.width - newX);
-      newHeight = Math.min(newHeight, containerBounds.height - newY);
+      // Apply container bounds constraints (accounting for offset)
+      const boundsOffsetX = containerBounds.offsetX ?? 0;
+      const boundsOffsetY = containerBounds.offsetY ?? 0;
+      const maxBoundsX = boundsOffsetX + containerBounds.width;
+      const maxBoundsY = boundsOffsetY + containerBounds.height;
+
+      newX = Math.max(boundsOffsetX, Math.min(newX, maxBoundsX - newWidth));
+      newY = Math.max(boundsOffsetY, Math.min(newY, maxBoundsY - newHeight));
+      newWidth = Math.min(newWidth, maxBoundsX - newX);
+      newHeight = Math.min(newHeight, maxBoundsY - newY);
 
       onChange({
         id,
@@ -316,12 +336,12 @@ const CropRectangle = ({
     };
   }, [resizeState, minWidth, minHeight, containerBounds, onChange, id, aspectRatio, sourceAspectRatio]);
 
-  // Calculate bounds for draggable
+  // Calculate bounds for draggable (accounting for video offset in letterboxed scenarios)
   const bounds = {
-    left: 0,
-    top: 0,
-    right: containerBounds.width - coordinates.width,
-    bottom: containerBounds.height - coordinates.height
+    left: offsetX,
+    top: offsetY,
+    right: offsetX + containerBounds.width - coordinates.width,
+    bottom: offsetY + containerBounds.height - coordinates.height
   };
 
   const resizeHandles: ResizeHandle[] = [

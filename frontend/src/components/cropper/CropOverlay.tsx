@@ -74,7 +74,49 @@ function generateInitialCoordinates(
 }
 
 /**
- * Normalize coordinates to 0-1 range, clamping to valid bounds
+ * Video bounds type for actual video visual area within container
+ */
+interface VideoBoundsType {
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+/**
+ * Normalize coordinates to 0-1 range relative to VIDEO bounds (not container)
+ * This ensures normalized values are consistent regardless of letterboxing
+ */
+function normalizeCoordinatesToVideoBounds(
+  coords: CropCoordinates[],
+  videoBounds: VideoBoundsType
+): NormalizedCropCoordinates[] {
+  const { width: boundsWidth, height: boundsHeight, offsetX, offsetY } = videoBounds;
+
+  return coords.map((coord) => {
+    // Convert from container-relative pixels to video-relative normalized (0-1)
+    // First subtract the video offset, then divide by video dimensions
+    const relativeX = coord.x - offsetX;
+    const relativeY = coord.y - offsetY;
+
+    // Clamp to video bounds before normalizing
+    const clampedX = Math.max(0, Math.min(relativeX, boundsWidth - coord.width));
+    const clampedY = Math.max(0, Math.min(relativeY, boundsHeight - coord.height));
+    const clampedWidth = Math.min(coord.width, boundsWidth - clampedX);
+    const clampedHeight = Math.min(coord.height, boundsHeight - clampedY);
+
+    return {
+      id: coord.id,
+      x: boundsWidth > 0 ? clampedX / boundsWidth : 0,
+      y: boundsHeight > 0 ? clampedY / boundsHeight : 0,
+      width: boundsWidth > 0 ? clampedWidth / boundsWidth : 0,
+      height: boundsHeight > 0 ? clampedHeight / boundsHeight : 0
+    };
+  });
+}
+
+/**
+ * Normalize coordinates to 0-1 range, clamping to valid bounds (legacy for debug display)
  */
 function normalizeCoordinates(
   coords: CropCoordinates[],
@@ -116,6 +158,8 @@ export interface CropOverlayProps {
   showCoordinates?: boolean;
   /** Video element dimensions for proper scaling */
   videoDimensions?: { width: number; height: number };
+  /** Reference to video element to get actual visual bounds (for object-contain) */
+  videoRef?: React.RefObject<HTMLVideoElement>;
 }
 
 /**
@@ -139,10 +183,14 @@ const CropOverlay = ({
   className = '',
   disabled = false,
   showCoordinates = false,
-  videoDimensions
+  videoDimensions,
+  videoRef
 }: CropOverlayProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  // videoBounds represents the actual video visual area within the container
+  // This accounts for letterboxing when video uses object-contain
+  const [videoBounds, setVideoBounds] = useState({ width: 0, height: 0, offsetX: 0, offsetY: 0 });
   const [coordinates, setCoordinates] = useState<CropCoordinates[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -165,42 +213,104 @@ const CropOverlay = ({
       : 16 / 9;
   }, [containerSize.width, containerSize.height, videoDimensions]);
 
-  // Update container size on mount and resize
-  useEffect(() => {
-    const updateSize = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        setContainerSize({ width: rect.width, height: rect.height });
+  /**
+   * Calculate the actual video visual bounds within the container.
+   * When video uses object-contain, the video may be letterboxed
+   * and not fill the entire container.
+   */
+  const calculateVideoBounds = useCallback(() => {
+    if (!containerRef.current) return;
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    const containerHeight = containerRect.height;
+
+    setContainerSize({ width: containerWidth, height: containerHeight });
+
+    // If we have a video ref with dimensions, calculate the actual video visual area
+    if (videoRef?.current && videoDimensions) {
+      const videoAspect = videoDimensions.width / videoDimensions.height;
+      const containerAspect = containerWidth / containerHeight;
+
+      let actualWidth: number;
+      let actualHeight: number;
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (videoAspect > containerAspect) {
+        // Video is wider - letterboxed top/bottom
+        actualWidth = containerWidth;
+        actualHeight = containerWidth / videoAspect;
+        offsetY = (containerHeight - actualHeight) / 2;
+      } else {
+        // Video is taller - letterboxed left/right
+        actualHeight = containerHeight;
+        actualWidth = containerHeight * videoAspect;
+        offsetX = (containerWidth - actualWidth) / 2;
       }
-    };
 
-    updateSize();
+      setVideoBounds({
+        width: actualWidth,
+        height: actualHeight,
+        offsetX,
+        offsetY
+      });
+    } else {
+      // No video ref or dimensions - use full container
+      setVideoBounds({
+        width: containerWidth,
+        height: containerHeight,
+        offsetX: 0,
+        offsetY: 0
+      });
+    }
+  }, [videoRef, videoDimensions]);
 
-    const resizeObserver = new ResizeObserver(updateSize);
+  // Update container size and video bounds on mount and resize
+  useEffect(() => {
+    calculateVideoBounds();
+
+    const resizeObserver = new ResizeObserver(calculateVideoBounds);
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current);
     }
 
-    return () => resizeObserver.disconnect();
-  }, []);
+    // Also listen to window resize for browser height changes
+    window.addEventListener('resize', calculateVideoBounds);
 
-  // Initialize coordinates when template or container size changes
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', calculateVideoBounds);
+    };
+  }, [calculateVideoBounds]);
+
+  // Recalculate when video dimensions change
   useEffect(() => {
-    if (containerSize.width === 0 || containerSize.height === 0) return;
+    calculateVideoBounds();
+  }, [videoDimensions, calculateVideoBounds]);
+
+  // Initialize coordinates when template or video bounds change
+  useEffect(() => {
+    // Use videoBounds for actual video area, which accounts for letterboxing
+    const boundsWidth = videoBounds.width;
+    const boundsHeight = videoBounds.height;
+
+    if (boundsWidth === 0 || boundsHeight === 0) return;
 
     if (initialCoordinates && initialCoordinates.length === templateConfig.count) {
       // Convert normalized coordinates to pixel coordinates with bounds clamping
+      // Normalized coords are relative to video content area, not container
       const pixelCoords = initialCoordinates.map((coord, index) => {
-        const rawX = coord.x * containerSize.width;
-        const rawY = coord.y * containerSize.height;
-        const rawWidth = coord.width * containerSize.width;
-        const rawHeight = coord.height * containerSize.height;
+        const rawX = coord.x * boundsWidth + videoBounds.offsetX;
+        const rawY = coord.y * boundsHeight + videoBounds.offsetY;
+        const rawWidth = coord.width * boundsWidth;
+        const rawHeight = coord.height * boundsHeight;
 
-        // Clamp to ensure crop stays within container bounds
-        const clampedWidth = Math.min(rawWidth, containerSize.width);
-        const clampedHeight = Math.min(rawHeight, containerSize.height);
-        const clampedX = Math.max(0, Math.min(rawX, containerSize.width - clampedWidth));
-        const clampedY = Math.max(0, Math.min(rawY, containerSize.height - clampedHeight));
+        // Clamp to ensure crop stays within video bounds (not container)
+        const clampedWidth = Math.min(rawWidth, boundsWidth);
+        const clampedHeight = Math.min(rawHeight, boundsHeight);
+        const clampedX = Math.max(videoBounds.offsetX, Math.min(rawX, videoBounds.offsetX + boundsWidth - clampedWidth));
+        const clampedY = Math.max(videoBounds.offsetY, Math.min(rawY, videoBounds.offsetY + boundsHeight - clampedHeight));
 
         return {
           id: coord.id || `crop-${index + 1}`,
@@ -212,32 +322,46 @@ const CropOverlay = ({
       });
       setCoordinates(pixelCoords);
     } else {
+      // Generate initial coordinates within video bounds
       const newCoords = generateInitialCoordinates(
         template,
-        containerSize.width,
-        containerSize.height
-      );
+        boundsWidth,
+        boundsHeight
+      ).map(coord => ({
+        ...coord,
+        // Offset by video bounds origin
+        x: coord.x + videoBounds.offsetX,
+        y: coord.y + videoBounds.offsetY,
+      }));
       setCoordinates(newCoords);
 
-      // Notify parent of initial coordinates
+      // Notify parent of initial coordinates (normalized to video area, not container)
       onNormalizedCropChange?.(
-        normalizeCoordinates(newCoords, containerSize.width, containerSize.height)
+        normalizeCoordinatesToVideoBounds(newCoords, videoBounds)
       );
     }
-  }, [template, containerSize, templateConfig.count, initialCoordinates, onNormalizedCropChange]);
+  }, [template, videoBounds, templateConfig.count, initialCoordinates, onNormalizedCropChange]);
 
-  // Handle coordinate changes with bounds enforcement
+  // Handle coordinate changes with bounds enforcement (constrained to VIDEO area, not container)
   const handleCoordinateChange = useCallback(
     (updatedCoord: CropCoordinates) => {
       setCoordinates((prev) => {
         const newCoords = prev.map((coord) => {
           if (coord.id !== updatedCoord.id) return coord;
 
-          // Enforce bounds: crop must stay fully inside container
-          const clampedWidth = Math.min(updatedCoord.width, containerSize.width);
-          const clampedHeight = Math.min(updatedCoord.height, containerSize.height);
-          const clampedX = Math.max(0, Math.min(updatedCoord.x, containerSize.width - clampedWidth));
-          const clampedY = Math.max(0, Math.min(updatedCoord.y, containerSize.height - clampedHeight));
+          // Enforce bounds: crop must stay fully inside VIDEO bounds (not container)
+          // This prevents dragging crop frames into letterbox areas
+          const maxWidth = videoBounds.width;
+          const maxHeight = videoBounds.height;
+          const minX = videoBounds.offsetX;
+          const minY = videoBounds.offsetY;
+          const maxX = videoBounds.offsetX + videoBounds.width;
+          const maxY = videoBounds.offsetY + videoBounds.height;
+
+          const clampedWidth = Math.min(updatedCoord.width, maxWidth);
+          const clampedHeight = Math.min(updatedCoord.height, maxHeight);
+          const clampedX = Math.max(minX, Math.min(updatedCoord.x, maxX - clampedWidth));
+          const clampedY = Math.max(minY, Math.min(updatedCoord.y, maxY - clampedHeight));
 
           return {
             ...updatedCoord,
@@ -248,15 +372,15 @@ const CropOverlay = ({
           };
         });
 
-        // Notify parent components
+        // Notify parent components with normalized coords relative to video area
         onNormalizedCropChange?.(
-          normalizeCoordinates(newCoords, containerSize.width, containerSize.height)
+          normalizeCoordinatesToVideoBounds(newCoords, videoBounds)
         );
 
         return newCoords;
       });
     },
-    [containerSize, onNormalizedCropChange]
+    [videoBounds, onNormalizedCropChange]
   );
 
   // Handle rectangle selection
@@ -284,13 +408,18 @@ const CropOverlay = ({
       onClick={handleContainerClick}
       data-testid="crop-overlay"
     >
-      {/* Crop rectangles */}
-      {containerSize.width > 0 && coordinates.map((coord, index) => (
+      {/* Crop rectangles - use videoBounds for constraints, not containerSize */}
+      {videoBounds.width > 0 && coordinates.map((coord, index) => (
         <CropRectangle
           key={coord.id}
           id={coord.id}
           coordinates={coord}
-          containerBounds={containerSize}
+          containerBounds={{
+            width: videoBounds.width,
+            height: videoBounds.height,
+            offsetX: videoBounds.offsetX,
+            offsetY: videoBounds.offsetY
+          }}
           isSelected={selectedId === coord.id}
           onSelect={handleSelect}
           onChange={handleCoordinateChange}
@@ -310,11 +439,7 @@ const CropOverlay = ({
           data-testid="coordinates-display"
         >
           {coordinates.map((coord, index) => {
-            const normalized = normalizeCoordinates(
-              [coord],
-              containerSize.width,
-              containerSize.height
-            )[0];
+            const normalized = normalizeCoordinatesToVideoBounds([coord], videoBounds)[0];
             return (
               <div key={coord.id} className="mb-1">
                 <span className="text-gray-400">{getLabel(index)}:</span>{' '}
