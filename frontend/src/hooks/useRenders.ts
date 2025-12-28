@@ -25,6 +25,10 @@ interface RendersResponse {
   total: number;
 }
 
+interface UseRendersOptions {
+  projectId?: string;  // Filter renders by project ID
+}
+
 interface UseRendersReturn {
   renders: Render[];
   total: number;
@@ -40,8 +44,10 @@ const API_BASE = '';
 
 /**
  * Custom hook for managing renders data and operations
+ * @param options.projectId - Optional project ID to filter renders
  */
-export function useRenders(): UseRendersReturn {
+export function useRenders(options: UseRendersOptions = {}): UseRendersReturn {
+  const { projectId } = options;
   const [renders, setRenders] = useState<Render[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -59,8 +65,14 @@ export function useRenders(): UseRendersReturn {
       }
 
       const data: RendersResponse = await response.json();
-      setRenders(data.renders);
-      setTotal(data.total);
+
+      // Filter by projectId if provided
+      const filteredRenders = projectId
+        ? data.renders.filter(r => r.project_id === projectId)
+        : data.renders;
+
+      setRenders(filteredRenders);
+      setTotal(filteredRenders.length);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An error occurred';
       setError(message);
@@ -68,7 +80,7 @@ export function useRenders(): UseRendersReturn {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [projectId]);
 
   const deleteRender = useCallback(async (id: string): Promise<boolean> => {
     try {

@@ -36,6 +36,8 @@ import { TimelineMarker, TimeRange, engagingMomentToMarker } from '../components
 import type { VideoFileMetadata } from '../services/api';
 import type { NormalizedCropCoordinates } from '../components/cropper/types';
 import type { TemplateType } from '../components/TemplateSelector';
+import { useRenders } from '../hooks/useRenders';
+import type { Render } from '../hooks/useRenders';
 
 const API_BASE = '';
 
@@ -210,6 +212,16 @@ const ProjectEditor = () => {
   const wsRef = useRef<WebSocket | null>(null);
   // Track if auto-pause is active for the current moment (prevents re-triggering after manual play)
   const autoPauseEnabledRef = useRef<boolean>(false);
+
+  // Project renders hook
+  const {
+    renders: projectRenders,
+    loading: rendersLoading,
+    deleteRender,
+    streamUrl,
+    downloadUrl,
+    refetch: refetchRenders,
+  } = useRenders({ projectId });
 
   // Determine workflow stage based on project state
   useEffect(() => {
@@ -753,6 +765,7 @@ const ProjectEditor = () => {
               message: `Render complete: ${msgData.output_path || 'clip ready'}`,
             });
             refreshProject();
+            refetchRenders();  // Refresh project renders list
             ws.close();
             // Clear progress after showing completion briefly
             setTimeout(() => setRenderProgress(null), 3000);
@@ -790,7 +803,7 @@ const ProjectEditor = () => {
       setError(message);
       setRenderProgress(null);
     }
-  }, [projectId, selectedMoment, project?.video_path, cropTemplate, cropCoordinates, textStyle, refreshProject, renderProgress?.stage]);
+  }, [projectId, selectedMoment, project?.video_path, cropTemplate, cropCoordinates, textStyle, refreshProject, refetchRenders, renderProgress?.stage]);
 
   // Handle moment selection
   const handleMomentClick = useCallback(async (marker: TimelineMarker) => {
@@ -1480,6 +1493,112 @@ const ProjectEditor = () => {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Project Renders Section */}
+      {projectRenders.length > 0 && (
+        <div className="mt-6 bg-gray-800 rounded-lg border border-gray-700 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Project Renders
+              <span className="text-sm font-normal text-gray-400">({projectRenders.length})</span>
+            </h3>
+            <a
+              href="/renders"
+              className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              View all renders →
+            </a>
+          </div>
+
+          <div className="max-h-64 overflow-y-auto space-y-2">
+            {[...projectRenders]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .map((render) => {
+                const date = new Date(render.created_at);
+                const formattedDate = date.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+                const duration = `${Math.floor(render.duration_seconds / 60)}:${Math.floor(render.duration_seconds % 60).toString().padStart(2, '0')}`;
+
+                return (
+                  <div
+                    key={render.id}
+                    className="flex items-center justify-between bg-gray-700/50 rounded-lg p-3 hover:bg-gray-700 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {/* Video icon */}
+                      <div className="w-10 h-10 bg-gray-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                        <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+
+                      {/* Info */}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-white truncate" title={render.moment_reason || 'Rendered clip'}>
+                          {render.moment_reason || 'Rendered clip'}
+                        </p>
+                        <div className="flex items-center gap-3 text-xs text-gray-400">
+                          <span>{duration}</span>
+                          <span>{render.file_size_formatted}</span>
+                          <span>{render.crop_template}</span>
+                          <span>{formattedDate}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2 flex-shrink-0 ml-3">
+                      <a
+                        href={streamUrl(render.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 bg-blue-600/80 hover:bg-blue-600 text-white rounded-lg transition-colors"
+                        title="View"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </a>
+                      <a
+                        href={downloadUrl(render.id)}
+                        download
+                        className="p-2 bg-green-600/80 hover:bg-green-600 text-white rounded-lg transition-colors"
+                        title="Download"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                      </a>
+                      <button
+                        onClick={async () => {
+                          if (window.confirm('Delete this render?')) {
+                            await deleteRender(render.id);
+                          }
+                        }}
+                        className="p-2 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors"
+                        title="Delete"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         </div>
       )}
 
