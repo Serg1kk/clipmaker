@@ -124,6 +124,15 @@ const Renders = () => {
 
   return (
     <div className="max-w-6xl">
+      {/* Product Showcase Hero */}
+      <div className="mb-8 rounded-xl overflow-hidden border border-gray-700 bg-gradient-to-br from-gray-800 to-gray-900 shadow-2xl">
+        <img
+          src="/product-showcase.png"
+          alt="AI Clips - Transform long videos into viral short clips"
+          className="w-full h-auto"
+        />
+      </div>
+
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Renders</h1>
