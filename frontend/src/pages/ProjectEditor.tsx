@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // Debounce utility for auto-save operations
@@ -1188,9 +1188,9 @@ const ProjectEditor = () => {
                     </svg>
                     Renders ({projectRenders.length})
                   </h4>
-                  <a href="/renders" className="text-xs text-blue-400 hover:text-blue-300">
+                  <Link to="/renders" className="text-xs text-blue-400 hover:text-blue-300">
                     View all →
-                  </a>
+                  </Link>
                 </div>
                 <div className="max-h-32 overflow-y-auto space-y-1">
                   {[...projectRenders]
