@@ -194,7 +194,7 @@ const MomentsSidebar = ({
         <>
         {/* Moments list */}
         <div
-          className="flex-1 overflow-y-auto"
+          className="flex-1 overflow-y-auto custom-scrollbar"
           data-testid="moments-list"
           role="list"
         >
