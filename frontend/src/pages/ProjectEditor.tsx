@@ -1231,7 +1231,7 @@ const ProjectEditor = () => {
                   srcType="video"
                   template={cropTemplate}
                   normalizedCoordinates={cropCoordinates}
-                  width={220}
+                  width={380}
                   textStyle={textStyle}
                   subtitleLines={subtitleLines}
                   mainVideoRef={videoRef}
