@@ -1176,6 +1176,56 @@ const ProjectEditor = () => {
                 defaultCollapsed={projectRenders.length > 0}
               />
             )}
+
+            {/* Project Renders - compact list */}
+            {projectRenders.length > 0 && (
+              <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Renders ({projectRenders.length})
+                  </h4>
+                  <a href="/renders" className="text-xs text-blue-400 hover:text-blue-300">
+                    View all →
+                  </a>
+                </div>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {[...projectRenders]
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                    .map((render) => {
+                      const date = new Date(render.created_at);
+                      const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <div key={render.id} className="flex items-center justify-between bg-gray-700/50 rounded px-2 py-1.5 text-xs">
+                          <span className="text-gray-300 truncate flex-1 mr-2">
+                            {render.moment_reason?.slice(0, 40) || 'Render'}...
+                          </span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-gray-500">{timeStr}</span>
+                            <a
+                              href={`/renders/${render.id}/stream`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-400 hover:text-blue-300"
+                            >
+                              View
+                            </a>
+                            <a
+                              href={`/renders/${render.id}/download`}
+                              className="text-green-400 hover:text-green-300"
+                            >
+                              Download
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Center Column (25%): Templates + Preview */}

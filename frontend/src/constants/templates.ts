@@ -260,10 +260,14 @@ export function generateDefaultCropAreas(
   const topFrameHeight = (topFrameWidth / topFrameAspectRatio) * sourceAspectRatio;
   const clampedTopFrameHeight = Math.min(topFrameHeight, 0.35); // Max 35% height
 
-  const bottomFrameWidth = 0.40;
-  // For 3:4 (vertical): height = width / aspectRatio * sourceAspectRatio
-  const bottomFrameHeight = (bottomFrameWidth / bottomFrameAspectRatio) * sourceAspectRatio;
-  const clampedBottomFrameHeight = Math.min(bottomFrameHeight, 0.55); // Max 55% height
+  // For 3:4 (vertical): Calculate width and height that maintain aspect ratio
+  // Start with desired height, calculate width to maintain 3:4 aspect ratio
+  const maxBottomFrameHeight = 0.55; // Max 55% height
+  const bottomFrameHeight = maxBottomFrameHeight;
+  // Width = height * aspectRatio / sourceAspectRatio (maintains 3:4 in the output)
+  const bottomFrameWidth = (bottomFrameHeight * bottomFrameAspectRatio) / sourceAspectRatio;
+  const clampedBottomFrameWidth = Math.min(bottomFrameWidth, 0.50); // Max 50% width
+  const clampedBottomFrameHeight = (clampedBottomFrameWidth / bottomFrameAspectRatio) * sourceAspectRatio;
 
   return [
     {
@@ -287,9 +291,9 @@ export function generateDefaultCropAreas(
     {
       // Bottom main frame (3:4 vertical)
       id: template.frames[2].id,
-      x: (1 - bottomFrameWidth) / 2, // Centered horizontally
+      x: (1 - clampedBottomFrameWidth) / 2, // Centered horizontally
       y: 0.40, // Lower area
-      width: bottomFrameWidth,
+      width: clampedBottomFrameWidth,
       height: clampedBottomFrameHeight,
       targetAspectRatio: bottomFrameAspectRatio,
     },
