@@ -4,6 +4,8 @@
 
 A full-stack application for transcribing videos, identifying engaging moments using AI, and generating short-form clips with synchronized subtitles.
 
+![AI Clips Interface](frontend/public/product-showcase.png)
+
 ## Quick Links
 
 | Guide | Description |
