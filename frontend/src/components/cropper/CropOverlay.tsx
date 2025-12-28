@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
 import CropRectangle from './CropRectangle';
 import {
   CropCoordinates,
@@ -194,6 +194,13 @@ const CropOverlay = ({
   const [coordinates, setCoordinates] = useState<CropCoordinates[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Store callback in ref to avoid triggering useEffect on callback identity changes
+  // This prevents coordinate reset when parent re-renders with new callback reference
+  const onNormalizedCropChangeRef = useRef(onNormalizedCropChange);
+  useLayoutEffect(() => {
+    onNormalizedCropChangeRef.current = onNormalizedCropChange;
+  }, [onNormalizedCropChange]);
+
   // Get template configuration
   const templateConfig = useMemo(() => getTemplateConfig(template), [template]);
 
@@ -289,6 +296,10 @@ const CropOverlay = ({
     calculateVideoBounds();
   }, [videoDimensions, calculateVideoBounds]);
 
+  // Track if we've already initialized coordinates for this template
+  // This prevents resetting user-modified coordinates when video bounds change
+  const initializedTemplateRef = useRef<string | null>(null);
+
   // Initialize coordinates when template or video bounds change
   useEffect(() => {
     // Use videoBounds for actual video area, which accounts for letterboxing
@@ -321,8 +332,13 @@ const CropOverlay = ({
         };
       });
       setCoordinates(pixelCoords);
-    } else {
-      // Generate initial coordinates within video bounds
+      // Mark this template as initialized with user coordinates
+      initializedTemplateRef.current = template;
+    } else if (template !== initializedTemplateRef.current) {
+      // Only generate default coordinates if:
+      // 1. Template changed (user switched templates), OR
+      // 2. We haven't initialized this template yet
+      // This prevents resetting when just videoBounds change
       const newCoords = generateInitialCoordinates(
         template,
         boundsWidth,
@@ -334,13 +350,17 @@ const CropOverlay = ({
         y: coord.y + videoBounds.offsetY,
       }));
       setCoordinates(newCoords);
+      initializedTemplateRef.current = template;
 
       // Notify parent of initial coordinates (normalized to video area, not container)
-      onNormalizedCropChange?.(
+      // Use ref to avoid callback identity triggering this effect
+      onNormalizedCropChangeRef.current?.(
         normalizeCoordinatesToVideoBounds(newCoords, videoBounds)
       );
     }
-  }, [template, videoBounds, templateConfig.count, initialCoordinates, onNormalizedCropChange]);
+    // Note: onNormalizedCropChange removed from deps - using ref instead to prevent
+    // callback identity changes from triggering coordinate reset
+  }, [template, videoBounds, templateConfig.count, initialCoordinates]);
 
   // Handle coordinate changes with bounds enforcement (constrained to VIDEO area, not container)
   const handleCoordinateChange = useCallback(
