@@ -231,6 +231,7 @@ const Projects = () => {
         </div>
       )}
 
+      {/* Sort projects by created_at (newest first) */}
       {projects.length === 0 ? (
         <div className="bg-gray-800 rounded-lg border border-gray-700 p-12 text-center">
           <svg
@@ -267,7 +268,9 @@ const Projects = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {projects.map((project) => (
+          {[...projects]
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
