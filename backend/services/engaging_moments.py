@@ -498,6 +498,57 @@ Respond with JSON only."""
             client.close()
 
 
+def _format_exclude_segments(exclude_segments: list[dict[str, float]]) -> str:
+    """
+    Format excluded time ranges for the LLM prompt.
+
+    Args:
+        exclude_segments: List of dicts with 'start' and 'end' keys
+
+    Returns:
+        Formatted string for prompt inclusion
+    """
+    if not exclude_segments:
+        return ""
+
+    lines = ["IMPORTANT: The following time ranges have ALREADY been identified as engaging moments.",
+             "DO NOT include any moments that overlap with these ranges:",
+             "",
+             "EXCLUDED RANGES:"]
+
+    for seg in exclude_segments:
+        start = seg.get("start", 0)
+        end = seg.get("end", 0)
+        lines.append(f"- {start:.2f}s - {end:.2f}s (already selected)")
+
+    lines.append("")
+    lines.append("Find NEW engaging moments in OTHER parts of the transcript.")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def _overlaps(moment: EngagingMoment, exclude_segments: list[dict[str, float]], tolerance: float = 2.0) -> bool:
+    """
+    Check if a moment overlaps with any excluded segments.
+
+    Args:
+        moment: The moment to check
+        exclude_segments: List of excluded time ranges
+        tolerance: Tolerance in seconds for overlap detection (default: 2.0)
+
+    Returns:
+        True if the moment overlaps with any excluded segment
+    """
+    for seg in exclude_segments:
+        seg_start = seg.get("start", 0)
+        seg_end = seg.get("end", 0)
+        # Check overlap with tolerance
+        if moment.start < seg_end + tolerance and moment.end > seg_start - tolerance:
+            return True
+    return False
+
+
 async def find_engaging_moments_async(
     transcript_json: dict[str, Any],
     *,
@@ -507,6 +558,7 @@ async def find_engaging_moments_async(
     min_duration: float = 13.0,
     max_duration: float = 60.0,
     max_moments: int = 7,
+    exclude_segments: list[dict[str, float]] | None = None,
 ) -> list[EngagingMoment]:
     """
     Async version of find_engaging_moments.
@@ -520,6 +572,7 @@ async def find_engaging_moments_async(
         max_tokens: Maximum tokens in response (default: 4096)
         min_duration: Minimum moment duration in seconds (default: 13.0)
         max_duration: Maximum moment duration in seconds (default: 60.0)
+        exclude_segments: List of time ranges to exclude (for find-more functionality)
 
     Returns:
         List of EngagingMoment objects
@@ -538,10 +591,15 @@ async def find_engaging_moments_async(
         logger.warning("No transcript segments found in input")
         return []
 
+    # Format exclude segments if provided
+    exclude_section = ""
+    if exclude_segments:
+        exclude_section = _format_exclude_segments(exclude_segments) + "\n"
+
     # Build the user prompt
     user_prompt = f"""Analyze the following transcript and identify the TOP {max_moments} most engaging moments (hooks) that are between {min_duration:.0f}-{max_duration:.0f} seconds long.
 
-TRANSCRIPT:
+{exclude_section}TRANSCRIPT:
 {formatted_transcript}
 
 Remember:
@@ -575,6 +633,14 @@ Respond with JSON only."""
             m for m in moments
             if min_duration <= m.duration <= max_duration
         ]
+
+        # Post-filter to remove any moments that overlap with excluded segments
+        # (in case LLM ignored the exclude instruction)
+        if exclude_segments:
+            valid_moments = [
+                m for m in valid_moments
+                if not _overlaps(m, exclude_segments)
+            ]
 
         # Sort by start time
         valid_moments.sort(key=lambda m: m.start)

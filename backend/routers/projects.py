@@ -275,6 +275,23 @@ class FindMomentsRequest(BaseModel):
     max_duration: float = Field(default=60.0, le=120.0, description="Maximum moment duration")
 
 
+class ExistingMoment(BaseModel):
+    """Model for an existing moment time range."""
+    start: float = Field(..., ge=0.0, description="Start time in seconds")
+    end: float = Field(..., ge=0.0, description="End time in seconds")
+
+
+class FindMoreMomentsRequest(BaseModel):
+    """Request model for finding additional moments."""
+    existing_moments: list[ExistingMoment] = Field(
+        default_factory=list,
+        description="List of existing moment time ranges to exclude"
+    )
+    min_duration: float = Field(default=13.0, ge=5.0, description="Minimum moment duration")
+    max_duration: float = Field(default=60.0, le=120.0, description="Maximum moment duration")
+    max_new_moments: int = Field(default=5, ge=1, le=10, description="Maximum new moments to find")
+
+
 class FindMomentsResponse(BaseModel):
     """Response model for moments job creation."""
     job_id: str
@@ -490,6 +507,224 @@ async def get_moments_job_status(project_id: str, job_id: str) -> dict:
             detail=f"Job not found: {job_id}",
         )
     return job
+
+
+# =============================================================================
+# POST /projects/{project_id}/moments/find-more - Find additional AI moments
+# =============================================================================
+
+
+async def process_find_more_moments(
+    job_id: str,
+    project_id: str,
+    existing_moments: list[dict],
+    min_duration: float,
+    max_duration: float,
+    max_new_moments: int,
+) -> None:
+    """
+    Background task to find additional engaging moments, excluding existing ones.
+    """
+    storage = get_project_storage()
+
+    try:
+        # Update job status
+        moments_jobs_store[job_id]["status"] = "processing"
+        moments_jobs_store[job_id]["message"] = "Loading transcription..."
+
+        # Broadcast initial progress
+        await connection_manager.broadcast_to_job(job_id, ProgressMessage(
+            type="moments_progress",
+            job_id=job_id,
+            stage="Finding More Moments",
+            progress=5.0,
+            message="Preparing to find additional moments...",
+        ))
+
+        # Load project
+        project = storage.load(project_id)
+
+        if not project.transcription:
+            raise ValueError("Project has no transcription. Transcribe the video first.")
+
+        # Convert transcription to format expected by find_engaging_moments
+        transcript_json = {
+            "text": project.transcription.text,
+            "segments": [
+                {
+                    "id": seg.id,
+                    "start": seg.start,
+                    "end": seg.end,
+                    "text": seg.text,
+                    "words": seg.words,
+                }
+                for seg in project.transcription.segments
+            ],
+            "language": project.transcription.language,
+            "duration": project.transcription.duration,
+        }
+
+        await connection_manager.broadcast_to_job(job_id, ProgressMessage(
+            type="moments_progress",
+            job_id=job_id,
+            stage="Finding More Moments",
+            progress=20.0,
+            message=f"AI is searching for new moments (excluding {len(existing_moments)} existing)...",
+        ))
+
+        # Find engaging moments using Gemini, excluding existing segments
+        new_moments = await find_engaging_moments_async(
+            transcript_json,
+            min_duration=min_duration,
+            max_duration=max_duration,
+            max_moments=max_new_moments,
+            exclude_segments=existing_moments,
+        )
+
+        await connection_manager.broadcast_to_job(job_id, ProgressMessage(
+            type="moments_progress",
+            job_id=job_id,
+            stage="Merging Moments",
+            progress=80.0,
+            message=f"Found {len(new_moments)} new moments, merging with existing...",
+        ))
+
+        # Convert new moments to MomentData
+        existing_count = len(project.moments) if project.moments else 0
+        new_moment_data_list = [
+            MomentData(
+                id=f"moment-{existing_count + i + 1}-{str(uuid.uuid4())[:8]}",
+                start=m.start,
+                end=m.end,
+                reason=m.reason,
+                text=m.text,
+                confidence=m.confidence,
+            )
+            for i, m in enumerate(new_moments)
+        ]
+
+        # Merge existing moments with new ones
+        all_moments = list(project.moments) if project.moments else []
+        all_moments.extend(new_moment_data_list)
+
+        # Sort by start time
+        all_moments.sort(key=lambda m: m.start)
+
+        # Update project with merged moments
+        update = ProjectUpdate(moments=all_moments)
+        updated_project = project.apply_update(update)
+        storage.save(project_id, updated_project)
+
+        # Update job as completed
+        moments_jobs_store[job_id]["status"] = "completed"
+        moments_jobs_store[job_id]["message"] = f"Found {len(new_moments)} new moments"
+        moments_jobs_store[job_id]["new_moments_count"] = len(new_moments)
+        moments_jobs_store[job_id]["total_moments"] = len(all_moments)
+
+        await connection_manager.broadcast_to_job(job_id, ProgressMessage(
+            type="moments_progress",
+            job_id=job_id,
+            stage="completed",
+            progress=100.0,
+            message=f"Complete! Found {len(new_moments)} new moments (total: {len(all_moments)}).",
+            details={
+                "new_moments_count": len(new_moments),
+                "total_moments": len(all_moments),
+            },
+        ))
+
+        logger.info(f"Found {len(new_moments)} new moments for project {project_id} (total: {len(all_moments)})")
+
+    except EntityNotFoundError:
+        moments_jobs_store[job_id]["status"] = "failed"
+        moments_jobs_store[job_id]["error"] = f"Project not found: {project_id}"
+        await connection_manager.broadcast_to_job(job_id, ProgressMessage(
+            type="moments_progress",
+            job_id=job_id,
+            stage="failed",
+            progress=0.0,
+            message=f"Error: Project not found",
+        ))
+    except Exception as e:
+        logger.error(f"Failed to find more moments: {e}")
+        moments_jobs_store[job_id]["status"] = "failed"
+        moments_jobs_store[job_id]["error"] = str(e)
+        await connection_manager.broadcast_to_job(job_id, ProgressMessage(
+            type="moments_progress",
+            job_id=job_id,
+            stage="failed",
+            progress=0.0,
+            message=f"Error: {str(e)}",
+        ))
+
+
+@router.post(
+    "/{project_id}/moments/find-more",
+    response_model=FindMomentsResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Find more engaging moments",
+    description="Find additional engaging moments, excluding existing ones",
+)
+async def find_more_moments(
+    project_id: str,
+    background_tasks: BackgroundTasks,
+    request: FindMoreMomentsRequest = FindMoreMomentsRequest(),
+) -> FindMomentsResponse:
+    """
+    Start a background task to find additional engaging moments.
+
+    Requires the project to have a transcription. Existing moments are excluded
+    from the search. Returns a job ID for tracking progress via WebSocket.
+    """
+    storage = get_project_storage()
+
+    # Validate project exists and has transcription
+    try:
+        project = storage.load(project_id)
+    except EntityNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project not found: {project_id}",
+        )
+
+    if not project.transcription:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Project has no transcription. Transcribe the video first.",
+        )
+
+    # Convert existing moments to dict format for exclude_segments
+    exclude_segments = [
+        {"start": m.start, "end": m.end}
+        for m in request.existing_moments
+    ]
+
+    # Create job
+    job_id = str(uuid.uuid4())
+    moments_jobs_store[job_id] = {
+        "job_id": job_id,
+        "project_id": project_id,
+        "status": "pending",
+        "message": "Starting search for more moments...",
+    }
+
+    # Start background task
+    background_tasks.add_task(
+        process_find_more_moments,
+        job_id,
+        project_id,
+        exclude_segments,
+        request.min_duration,
+        request.max_duration,
+        request.max_new_moments,
+    )
+
+    return FindMomentsResponse(
+        job_id=job_id,
+        status="pending",
+        message="Finding more AI moments...",
+        websocket_url=f"/ws/job/{job_id}",
+    )
 
 
 @router.put(

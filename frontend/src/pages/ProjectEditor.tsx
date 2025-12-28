@@ -192,6 +192,7 @@ const ProjectEditor = () => {
   const [currentStage, setCurrentStage] = useState<WorkflowStage>('select-video');
   const [transcribeProgress, setTranscribeProgress] = useState<JobProgress | null>(null);
   const [momentsProgress, setMomentsProgress] = useState<JobProgress | null>(null);
+  const [findMoreProgress, setFindMoreProgress] = useState<JobProgress | null>(null);
   const [renderProgress, setRenderProgress] = useState<JobProgress | null>(null);
 
   // Moment editing state
@@ -633,6 +634,51 @@ const ProjectEditor = () => {
       setMomentsProgress(null);
     }
   }, [projectId, project?.transcription, connectWebSocket, refreshProject]);
+
+  // Handle find more moments
+  const handleFindMoreMoments = useCallback(async () => {
+    if (!projectId || !project?.moments || project.moments.length === 0) return;
+
+    setFindMoreProgress({ stage: 'starting', progress: 0, message: 'Starting search for more moments...' });
+
+    try {
+      // Collect existing moments as time ranges
+      const existingMoments = project.moments.map(m => ({
+        start: m.start,
+        end: m.end,
+      }));
+
+      const response = await fetch(`${API_BASE}/projects/${projectId}/moments/find-more`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          existing_moments: existingMoments,
+          min_duration: 13,
+          max_duration: 60,
+          max_new_moments: 5,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to start find more: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const jobId = data.job_id;
+
+      connectWebSocket(jobId,
+        (progress) => setFindMoreProgress(progress),
+        async () => {
+          await refreshProject();
+          setFindMoreProgress(null);
+        }
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to find more moments';
+      setError(message);
+      setFindMoreProgress(null);
+    }
+  }, [projectId, project?.moments, connectWebSocket, refreshProject]);
 
   // Handle render moment - connects to /ws/render/{job_id} for progress
   const handleRenderMoment = useCallback(async () => {
@@ -1255,14 +1301,22 @@ const ProjectEditor = () => {
           </div>
 
           {/* Right Column (25%): AI Moments Sidebar - scrollable */}
-          <div className="pl-2 overflow-hidden">
+          <div className="pl-2 overflow-hidden flex flex-col">
             <MomentsSidebar
               moments={timelineMarkers}
               selectedMomentId={selectedMomentId}
               onMomentClick={handleMomentClick}
               onMomentDelete={handleMomentDelete}
-              className="h-full overflow-y-auto"
+              onFindMore={handleFindMoreMoments}
+              findMoreLoading={findMoreProgress !== null}
+              className="flex-1 overflow-y-auto"
             />
+            {/* Find More Progress Bar */}
+            {findMoreProgress && (
+              <div className="mt-2 bg-gray-800 rounded-lg border border-gray-700 p-3">
+                <ProgressBar {...findMoreProgress} />
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -1408,14 +1462,22 @@ const ProjectEditor = () => {
 
           {/* Right side: Moments Sidebar */}
           {currentStage === 'edit-moments' && (
-            <div className="w-80 flex-shrink-0">
+            <div className="w-80 flex-shrink-0 flex flex-col">
               <MomentsSidebar
                 moments={timelineMarkers}
                 selectedMomentId={selectedMomentId}
                 onMomentClick={handleMomentClick}
                 onMomentDelete={handleMomentDelete}
-                className="h-[calc(100vh-200px)]"
+                onFindMore={handleFindMoreMoments}
+                findMoreLoading={findMoreProgress !== null}
+                className="flex-1 max-h-[calc(100vh-250px)]"
               />
+              {/* Find More Progress Bar */}
+              {findMoreProgress && (
+                <div className="mt-2 bg-gray-800 rounded-lg border border-gray-700 p-3">
+                  <ProgressBar {...findMoreProgress} />
+                </div>
+              )}
             </div>
           )}
         </div>
