@@ -1179,10 +1179,10 @@ const ProjectEditor = () => {
               />
             )}
 
-            {/* Project Renders - fills remaining space, scrolls when needed */}
+            {/* Project Renders - fixed height, scrolls internally */}
             {projectRenders.length > 0 && (
-              <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3 flex-1 min-h-0 flex flex-col">
-                <div className="flex items-center justify-between mb-2 flex-shrink-0">
+              <div className="mt-3 bg-gray-800 rounded-lg border border-gray-700 p-3 flex-shrink-0">
+                <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
                     <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -1194,7 +1194,7 @@ const ProjectEditor = () => {
                     View all →
                   </Link>
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar-thin">
+                <div className="max-h-40 overflow-y-auto space-y-1 custom-scrollbar-thin">
                   {[...projectRenders]
                     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                     .map((render) => {
