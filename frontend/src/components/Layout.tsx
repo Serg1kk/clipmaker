@@ -103,7 +103,6 @@ const Layout = () => {
         <nav className="flex-1 p-4 space-y-2">
           <NavItem to="/" icon={<HomeIcon />} label="Home" />
           <NavItem to="/projects" icon={<ProjectsIcon />} label="Projects" />
-          <NavItem to="/cropper-demo" icon={<CropperIcon />} label="Cropper Demo" />
         </nav>
 
         {/* Footer */}

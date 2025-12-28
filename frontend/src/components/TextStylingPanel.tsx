@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import ColorPicker from './ColorPicker';
-import PositionSelector from './PositionSelector';
+import PositionSelector, { TopPositionIcon, CenterPositionIcon, BottomPositionIcon } from './PositionSelector';
 
 /**
  * Text position type representing vertical text placement
@@ -8,19 +8,41 @@ import PositionSelector from './PositionSelector';
 export type TextPosition = 'top' | 'center' | 'bottom';
 
 /**
- * Font family type representing available font options
+ * Font family type representing available font options (21 fonts total)
  */
 export type FontFamily =
+  // System/Web Safe Sans-Serif (6)
   | 'Arial'
   | 'Helvetica'
-  | 'Georgia'
-  | 'Times New Roman'
   | 'Verdana'
   | 'Trebuchet MS'
-  | 'Courier New'
-  | 'Impact'
   | 'Roboto'
-  | 'Open Sans';
+  | 'Open Sans'
+  // Google Fonts Sans-Serif (5)
+  | 'Montserrat'
+  | 'Lato'
+  | 'Poppins'
+  | 'Inter'
+  | 'Oswald'
+  // Serif (3)
+  | 'Georgia'
+  | 'Times New Roman'
+  | 'Playfair Display'
+  // Monospace (1)
+  | 'Courier New'
+  // Display/TikTok Style (5)
+  | 'Impact'
+  | 'Bebas Neue'
+  | 'Anton'
+  | 'Bangers'
+  | 'Archivo Black'
+  // Handwriting (1)
+  | 'Permanent Marker';
+
+/**
+ * Font category type
+ */
+export type FontCategory = 'sans-serif' | 'serif' | 'monospace' | 'display' | 'handwriting';
 
 /**
  * Font option configuration
@@ -29,7 +51,7 @@ export interface FontOption {
   id: FontFamily;
   label: string;
   value: string;
-  category: 'sans-serif' | 'serif' | 'monospace' | 'display';
+  category: FontCategory;
 }
 
 /**
@@ -65,19 +87,36 @@ export interface TextStylingPanelProps {
 }
 
 /**
- * Available font families configuration
+ * Available font families configuration (21 fonts total)
  */
 export const FONT_OPTIONS: FontOption[] = [
+  // System/Web Safe Sans-Serif
   { id: 'Arial', label: 'Arial', value: 'Arial, sans-serif', category: 'sans-serif' },
   { id: 'Helvetica', label: 'Helvetica', value: 'Helvetica, Arial, sans-serif', category: 'sans-serif' },
-  { id: 'Roboto', label: 'Roboto', value: "'Roboto', sans-serif", category: 'sans-serif' },
-  { id: 'Open Sans', label: 'Open Sans', value: "'Open Sans', sans-serif", category: 'sans-serif' },
   { id: 'Verdana', label: 'Verdana', value: 'Verdana, Geneva, sans-serif', category: 'sans-serif' },
   { id: 'Trebuchet MS', label: 'Trebuchet MS', value: "'Trebuchet MS', sans-serif", category: 'sans-serif' },
+  { id: 'Roboto', label: 'Roboto', value: "'Roboto', sans-serif", category: 'sans-serif' },
+  { id: 'Open Sans', label: 'Open Sans', value: "'Open Sans', sans-serif", category: 'sans-serif' },
+  // Google Fonts Sans-Serif (Popular)
+  { id: 'Montserrat', label: 'Montserrat', value: "'Montserrat', sans-serif", category: 'sans-serif' },
+  { id: 'Lato', label: 'Lato', value: "'Lato', sans-serif", category: 'sans-serif' },
+  { id: 'Poppins', label: 'Poppins', value: "'Poppins', sans-serif", category: 'sans-serif' },
+  { id: 'Inter', label: 'Inter', value: "'Inter', sans-serif", category: 'sans-serif' },
+  { id: 'Oswald', label: 'Oswald', value: "'Oswald', sans-serif", category: 'sans-serif' },
+  // Serif
   { id: 'Georgia', label: 'Georgia', value: 'Georgia, serif', category: 'serif' },
   { id: 'Times New Roman', label: 'Times New Roman', value: "'Times New Roman', Times, serif", category: 'serif' },
+  { id: 'Playfair Display', label: 'Playfair Display', value: "'Playfair Display', serif", category: 'serif' },
+  // Monospace
   { id: 'Courier New', label: 'Courier New', value: "'Courier New', Courier, monospace", category: 'monospace' },
+  // Display/TikTok Style
   { id: 'Impact', label: 'Impact', value: 'Impact, Haettenschweiler, sans-serif', category: 'display' },
+  { id: 'Bebas Neue', label: 'Bebas Neue', value: "'Bebas Neue', sans-serif", category: 'display' },
+  { id: 'Anton', label: 'Anton', value: "'Anton', sans-serif", category: 'display' },
+  { id: 'Bangers', label: 'Bangers', value: "'Bangers', cursive", category: 'display' },
+  { id: 'Archivo Black', label: 'Archivo Black', value: "'Archivo Black', sans-serif", category: 'display' },
+  // Handwriting
+  { id: 'Permanent Marker', label: 'Permanent Marker', value: "'Permanent Marker', cursive", category: 'handwriting' },
 ];
 
 /**
@@ -251,20 +290,24 @@ const TextStylingPanel = ({
 
           {/* Position */}
           <div className="flex gap-1">
-            {(['top', 'center', 'bottom'] as TextPosition[]).map((pos) => (
+            {([
+              { pos: 'top' as TextPosition, Icon: TopPositionIcon },
+              { pos: 'center' as TextPosition, Icon: CenterPositionIcon },
+              { pos: 'bottom' as TextPosition, Icon: BottomPositionIcon },
+            ]).map(({ pos, Icon }) => (
               <button
                 key={pos}
                 type="button"
                 onClick={() => handlePositionChange(pos)}
                 disabled={disabled}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`p-1 rounded transition-colors ${
                   style.position === pos
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
                 title={`Position: ${pos}`}
               >
-                {pos.charAt(0).toUpperCase()}
+                <Icon className="w-5 h-4" />
               </button>
             ))}
           </div>

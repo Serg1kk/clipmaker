@@ -94,6 +94,9 @@ const BottomPositionIcon = ({ className = '' }: { className?: string }) => (
   </svg>
 );
 
+// Export position icons for use in other components
+export { TopPositionIcon, CenterPositionIcon, BottomPositionIcon };
+
 /**
  * Map position IDs to their icon components
  */
