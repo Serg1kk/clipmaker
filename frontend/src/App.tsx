@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import Home from './pages/Home';
 import Projects from './pages/Projects';
 import ProjectEditor from './pages/ProjectEditor';
+import Renders from './pages/Renders';
 import CropperDemo from './pages/CropperDemo';
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
           <Route index element={<Home />} />
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:projectId" element={<ProjectEditor />} />
+          <Route path="renders" element={<Renders />} />
           <Route path="cropper-demo" element={<CropperDemo />} />
         </Route>
       </Routes>

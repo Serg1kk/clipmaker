@@ -558,3 +558,221 @@ def get_storage_service(base_path: str = "output") -> StorageService:
     if _default_service is None:
         _default_service = StorageService(base_path)
     return _default_service
+
+
+# =============================================================================
+# Render Storage Service
+# =============================================================================
+
+
+class RenderStorageError(Exception):
+    """Base exception for render storage errors."""
+    pass
+
+
+class RenderNotFoundError(RenderStorageError):
+    """Raised when a render is not found."""
+    pass
+
+
+class RenderStorage:
+    """
+    JSON-based storage service for render history.
+
+    Stores render metadata separately from projects to preserve history
+    even when projects are deleted.
+
+    Storage Structure:
+        /data/
+        └── renders/
+            ├── index.json  (list of all render IDs)
+            └── {render_id}.json
+    """
+
+    def __init__(self, base_path: str = "data/renders"):
+        """
+        Initialize the render storage service.
+
+        Args:
+            base_path: Root directory for render storage
+        """
+        self.base_path = Path(base_path).resolve()
+        self.index_path = self.base_path / "index.json"
+        self._ensure_directories()
+
+    def _ensure_directories(self) -> None:
+        """Create necessary directory structure if it doesn't exist."""
+        self.base_path.mkdir(parents=True, exist_ok=True)
+        if not self.index_path.exists():
+            self._save_index([])
+
+    def _load_index(self) -> list[str]:
+        """Load the render IDs index from disk."""
+        try:
+            if self.index_path.exists():
+                with open(self.index_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except (json.JSONDecodeError, Exception) as e:
+            print(f"Warning: Could not load render index: {e}")
+        return []
+
+    def _save_index(self, render_ids: list[str]) -> None:
+        """Save the render IDs index to disk."""
+        with open(self.index_path, "w", encoding="utf-8") as f:
+            json.dump(render_ids, f, indent=2)
+
+    def _get_render_file(self, render_id: str) -> Path:
+        """Get the file path for a specific render."""
+        return self.base_path / f"{render_id}.json"
+
+    def save(self, render: "Render") -> None:
+        """
+        Save a render to storage.
+
+        Args:
+            render: The Render instance to save
+
+        Raises:
+            RenderStorageError: If save operation fails
+        """
+        from models.render import Render
+
+        try:
+            render_file = self._get_render_file(render.id)
+            with open(render_file, "w", encoding="utf-8") as f:
+                f.write(render.model_dump_json(indent=2))
+
+            # Update index
+            render_ids = self._load_index()
+            if render.id not in render_ids:
+                render_ids.insert(0, render.id)  # Most recent first
+                self._save_index(render_ids)
+
+        except Exception as e:
+            raise RenderStorageError(f"Failed to save render: {e}") from e
+
+    def load(self, render_id: str) -> "Render":
+        """
+        Load a render from storage.
+
+        Args:
+            render_id: The unique render identifier
+
+        Returns:
+            The loaded Render instance
+
+        Raises:
+            RenderNotFoundError: If render doesn't exist
+            RenderStorageError: If load operation fails
+        """
+        from models.render import Render
+
+        render_file = self._get_render_file(render_id)
+
+        if not render_file.exists():
+            raise RenderNotFoundError(f"Render not found: {render_id}")
+
+        try:
+            with open(render_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return Render.model_validate(data)
+        except json.JSONDecodeError as e:
+            raise RenderStorageError(f"Invalid render file: {e}") from e
+        except Exception as e:
+            raise RenderStorageError(f"Failed to load render: {e}") from e
+
+    def delete(self, render_id: str, delete_file: bool = True) -> None:
+        """
+        Delete a render from storage.
+
+        Args:
+            render_id: The unique render identifier
+            delete_file: If True, also delete the rendered video file
+
+        Raises:
+            RenderNotFoundError: If render doesn't exist
+            RenderStorageError: If delete operation fails
+        """
+        render_file = self._get_render_file(render_id)
+
+        if not render_file.exists():
+            raise RenderNotFoundError(f"Render not found: {render_id}")
+
+        try:
+            # Optionally delete the rendered video file
+            if delete_file:
+                render = self.load(render_id)
+                video_path = Path(render.file_path)
+                if video_path.exists():
+                    video_path.unlink()
+                    # Also try to clean up empty parent directories
+                    try:
+                        parent = video_path.parent
+                        if parent.exists() and not any(parent.iterdir()):
+                            parent.rmdir()
+                    except Exception:
+                        pass
+
+            # Delete the render metadata file
+            render_file.unlink()
+
+            # Update index
+            render_ids = self._load_index()
+            if render_id in render_ids:
+                render_ids.remove(render_id)
+                self._save_index(render_ids)
+
+        except RenderNotFoundError:
+            raise
+        except Exception as e:
+            raise RenderStorageError(f"Failed to delete render: {e}") from e
+
+    def list_all(self) -> list["Render"]:
+        """
+        List all renders sorted by created_at (most recent first).
+
+        Returns:
+            List of Render instances
+        """
+        renders = []
+        render_ids = self._load_index()
+
+        for render_id in render_ids:
+            try:
+                render = self.load(render_id)
+                renders.append(render)
+            except (RenderNotFoundError, RenderStorageError):
+                # Skip invalid or missing renders
+                continue
+
+        # Sort by created_at descending
+        renders.sort(key=lambda r: r.created_at, reverse=True)
+        return renders
+
+    def exists(self, render_id: str) -> bool:
+        """Check if a render exists in storage."""
+        return self._get_render_file(render_id).exists()
+
+    def count(self) -> int:
+        """Get the count of stored renders."""
+        return len(self._load_index())
+
+
+# Singleton render storage instance
+_render_storage: Optional[RenderStorage] = None
+
+
+def get_render_storage(base_path: str = "data/renders") -> RenderStorage:
+    """
+    Get or create the default render storage instance.
+
+    Args:
+        base_path: Root directory for render storage
+
+    Returns:
+        RenderStorage instance
+    """
+    global _render_storage
+    if _render_storage is None:
+        _render_storage = RenderStorage(base_path)
+    return _render_storage

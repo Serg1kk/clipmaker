@@ -71,6 +71,7 @@ from services.render_service import (
 from models.transcription_moment import TranscriptionMoment
 from services.json_storage import JSONFileStorage, EntityNotFoundError
 from routers.projects import router as projects_router
+from routers.renders import router as renders_router
 
 
 # Logger
@@ -239,6 +240,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(projects_router)
+app.include_router(renders_router)
 
 
 async def process_transcription(job_id: str) -> None:
@@ -1728,6 +1730,28 @@ async def process_render(job_id: str, request: RenderEndpointRequest) -> None:
             logger.info(f"Saved rendered_path to moment {request.moment_id}")
         except Exception as save_err:
             logger.warning(f"Failed to save rendered_path to project: {save_err}")
+
+        # Save render to render history storage
+        try:
+            from models.render import Render
+            from services.storage_service import get_render_storage
+
+            render_storage = get_render_storage()
+            render_record = Render.from_render_result(
+                project_id=request.project_id,
+                project_name=project.name,
+                moment_id=request.moment_id,
+                moment_reason=moment_data.reason if moment_data else "",
+                file_path=str(final_output_path),
+                duration_seconds=moment_data.end - moment_data.start if moment_data else 0.0,
+                crop_template=moment_data.crop_template or "1-frame" if moment_data else "1-frame",
+                crop_coordinates=moment_data.crop_coordinates if moment_data else [],
+                subtitle_config=moment_data.subtitle_config if moment_data else {},
+            )
+            render_storage.save(render_record)
+            logger.info(f"Saved render to history: {render_record.id}")
+        except Exception as render_save_err:
+            logger.warning(f"Failed to save render to history: {render_save_err}")
 
         logger.info(f"Render completed for job {job_id}: {final_output_path}")
 
