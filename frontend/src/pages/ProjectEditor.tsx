@@ -1168,8 +1168,10 @@ const ProjectEditor = () => {
             </div>
 
             {/* Crop Settings Panel - collapsible, shows raw and normalized coordinates */}
+            {/* Key forces re-mount when renders state changes to apply correct defaultCollapsed */}
             {cropCoordinates.length > 0 && (
               <CropSettings
+                key={projectRenders.length > 0 ? 'has-renders' : 'no-renders'}
                 normalizedCoordinates={cropCoordinates}
                 videoDimensions={sourceVideoDimensions || undefined}
                 className="mt-3 flex-shrink-0"
