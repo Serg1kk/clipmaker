@@ -212,8 +212,8 @@ const ProjectEditor = () => {
   // Track if auto-pause is active for the current moment (prevents re-triggering after manual play)
   const autoPauseEnabledRef = useRef<boolean>(false);
 
-  // Hook to refetch renders after render completes
-  const { refetch: refetchRenders } = useRenders({ projectId });
+  // Hook to get renders count and refetch after render completes
+  const { renders: projectRenders, refetch: refetchRenders } = useRenders({ projectId });
 
   // Determine workflow stage based on project state
   useEffect(() => {
@@ -1099,7 +1099,7 @@ const ProjectEditor = () => {
                   aspectRatio: sourceVideoDimensions
                     ? `${sourceVideoDimensions.width} / ${sourceVideoDimensions.height}`
                     : '16 / 9',
-                  maxHeight: 'calc(32vh - 40px)'
+                  maxHeight: 'calc(50vh - 60px)'
                 }}
               >
                 {/* Video Element - controls hidden when CropOverlay is active */}
@@ -1173,7 +1173,7 @@ const ProjectEditor = () => {
                 normalizedCoordinates={cropCoordinates}
                 videoDimensions={sourceVideoDimensions || undefined}
                 className="mt-3 flex-shrink-0"
-                defaultCollapsed={true}
+                defaultCollapsed={projectRenders.length > 0}
               />
             )}
           </div>
@@ -1181,14 +1181,14 @@ const ProjectEditor = () => {
           {/* Center Column (25%): Templates + Preview */}
           <div className="flex flex-col min-h-0 px-2 overflow-y-auto">
             {/* Vertical Template Selector with 9:16 icons */}
-            <div className="bg-gray-800 rounded-lg border border-gray-700 p-2 mb-2">
-              <h4 className="text-xs font-medium text-gray-300 mb-2">Template</h4>
-              <div className="flex flex-col gap-1">
+            <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
+              <h4 className="text-sm font-medium text-gray-300 mb-3">Template</h4>
+              <div className="flex flex-col gap-2">
                 {(['1-frame', '2-frame', '3-frame'] as TemplateType[]).map((template) => (
                   <button
                     key={template}
                     onClick={() => handleTemplateChange(template)}
-                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors text-sm ${
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                       cropTemplate === template
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
@@ -1236,7 +1236,7 @@ const ProjectEditor = () => {
                   srcType="video"
                   template={cropTemplate}
                   normalizedCoordinates={cropCoordinates}
-                  width={300}
+                  width={380}
                   textStyle={textStyle}
                   subtitleLines={subtitleLines}
                   mainVideoRef={videoRef}
