@@ -36,7 +36,12 @@ videos/*
 uploads/*
 !uploads/.gitkeep
 backend/data/
+backend/output/
+backend/uploads/
 data/
+
+# Temporary scripts
+fix_transcription.py
 
 # Logs
 *.log
