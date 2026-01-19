@@ -31,7 +31,7 @@ class OpenRouterConfig:
     max_retries: int = 3
     http_referer: Optional[str] = None
     site_name: Optional[str] = None
-    default_model: str = "google/gemini-2.5-pro"
+    default_model: str = "google/gemini-3-flash-preview"
 
     # Rate limiting configuration
     rate_limit_base_delay: float = 1.0
@@ -96,7 +96,7 @@ class OpenRouterConfig:
             "site_name": os.environ.get("OPENROUTER_SITE_NAME"),
             "default_model": os.environ.get(
                 "OPENROUTER_DEFAULT_MODEL",
-                "google/gemini-2.5-pro"
+                "google/gemini-3-flash-preview"
             ),
         }
 

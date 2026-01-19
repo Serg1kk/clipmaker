@@ -576,7 +576,7 @@ class RenderService:
             output_path=ass_path,
         )
 
-        logger.info(f"Generated subtitle file: {ass_path}")
+        logger.info(f"Generated subtitle file: {ass_path} (font: {subtitle_cfg.font_name}, size: {subtitle_cfg.font_size})")
         return ass_path
 
     async def _extract_moment_clip(
@@ -677,7 +677,40 @@ class RenderService:
         # Need to escape special characters in path for filter
         sub_path_escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:")
 
-        vf_filter = f"ass='{sub_path_escaped}'"
+        # Build ASS filter with font directories for font discovery
+        # Include user fonts, system fonts, and homebrew fonts (for macOS)
+        import platform
+        fonts_dirs = []
+        if platform.system() == "Darwin":
+            # macOS font directories
+            home = os.path.expanduser("~")
+            fonts_dirs = [
+                f"{home}/Library/Fonts",
+                "/Library/Fonts",
+                "/System/Library/Fonts",
+                "/System/Library/Fonts/Supplemental",
+            ]
+        elif platform.system() == "Linux":
+            # Linux font directories
+            home = os.path.expanduser("~")
+            fonts_dirs = [
+                f"{home}/.fonts",
+                f"{home}/.local/share/fonts",
+                "/usr/share/fonts",
+                "/usr/local/share/fonts",
+            ]
+
+        # Build fontsdir option - escape colons in paths
+        if fonts_dirs:
+            existing_dirs = [d for d in fonts_dirs if os.path.isdir(d)]
+            if existing_dirs:
+                # Use only first valid directory (ASS filter limitation)
+                fonts_dir_escaped = existing_dirs[0].replace(":", "\\:")
+                vf_filter = f"ass='{sub_path_escaped}':fontsdir='{fonts_dir_escaped}'"
+            else:
+                vf_filter = f"ass='{sub_path_escaped}'"
+        else:
+            vf_filter = f"ass='{sub_path_escaped}'"
 
         cmd = [
             self.ffmpeg_path,
@@ -692,7 +725,7 @@ class RenderService:
             str(output_path),
         ]
 
-        logger.info(f"Burning subtitles into video")
+        logger.info(f"Burning subtitles into video with filter: {vf_filter}")
         logger.debug(f"FFmpeg command: {' '.join(cmd)}")
 
         try:

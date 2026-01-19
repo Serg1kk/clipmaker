@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { TimelineMarker, formatTime } from './timeline/types';
 
 /**
@@ -21,6 +21,8 @@ export interface MomentsSidebarProps {
   className?: string;
   /** Whether the sidebar is disabled */
   disabled?: boolean;
+  /** IDs of newly added moments to highlight */
+  newMomentIds?: Set<string>;
 }
 
 /**
@@ -71,6 +73,7 @@ const MomentsSidebar = ({
   findMoreLoading = false,
   className = '',
   disabled = false,
+  newMomentIds,
 }: MomentsSidebarProps) => {
   // Handle moment row click
   const handleMomentClick = useCallback(
@@ -200,6 +203,7 @@ const MomentsSidebar = ({
         >
           {moments.map((marker, index) => {
             const isSelected = selectedMomentId === marker.id;
+            const isNew = newMomentIds?.has(marker.id) ?? false;
             const confidenceInfo = marker.confidence !== undefined
               ? getConfidenceInfo(marker.confidence)
               : null;
@@ -211,7 +215,9 @@ const MomentsSidebar = ({
                   px-4 py-3 cursor-pointer transition-colors
                   ${isSelected
                     ? 'bg-blue-600/30 border-l-4 border-blue-500 selected'
-                    : 'hover:bg-gray-700/50 border-l-4 border-transparent'
+                    : isNew
+                      ? 'bg-green-600/20 border-l-4 border-green-500 animate-pulse'
+                      : 'hover:bg-gray-700/50 border-l-4 border-transparent'
                   }
                   ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
@@ -317,6 +323,11 @@ const MomentsSidebar = ({
                   {marker.type === 'highlight' && (
                     <span className="px-2 py-0.5 bg-yellow-600/30 text-yellow-300 text-xs rounded">
                       Highlight
+                    </span>
+                  )}
+                  {isNew && (
+                    <span className="px-2 py-0.5 bg-green-600 text-white text-xs rounded font-semibold animate-pulse">
+                      NEW
                     </span>
                   )}
                 </div>

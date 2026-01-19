@@ -206,6 +206,10 @@ const ProjectEditor = () => {
   const [cropCoordinates, setCropCoordinates] = useState<NormalizedCropCoordinates[]>([]);
   const [sourceVideoDimensions, setSourceVideoDimensions] = useState<{ width: number; height: number } | null>(null);
 
+  // Track newly added moments for highlighting
+  const [newMomentIds, setNewMomentIds] = useState<Set<string>>(new Set());
+  const previousMomentIdsRef = useRef<Set<string>>(new Set());
+
   // Refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -414,17 +418,19 @@ const ProjectEditor = () => {
   }, []);
 
   // Refresh project data
-  const refreshProject = useCallback(async () => {
-    if (!projectId) return;
+  const refreshProject = useCallback(async (): Promise<ExtendedProject | null> => {
+    if (!projectId) return null;
     try {
       const response = await fetch(`${API_BASE}/projects/${projectId}`);
       if (response.ok) {
         const data: ExtendedProject = await response.json();
         setProject(data);
+        return data;
       }
     } catch (e) {
       console.error('Failed to refresh project:', e);
     }
+    return null;
   }, [projectId]);
 
   const handleBack = () => {
@@ -643,6 +649,9 @@ const ProjectEditor = () => {
   const handleFindMoreMoments = useCallback(async () => {
     if (!projectId || !project?.moments || project.moments.length === 0) return;
 
+    // Save current moment IDs before finding more
+    previousMomentIdsRef.current = new Set(project.moments.map(m => m.id));
+
     setFindMoreProgress({ stage: 'starting', progress: 0, message: 'Starting search for more moments...' });
 
     try {
@@ -659,7 +668,7 @@ const ProjectEditor = () => {
           existing_moments: existingMoments,
           min_duration: 13,
           max_duration: 60,
-          max_new_moments: 5,
+          // max_new_moments вычисляется на backend пропорционально длине видео
         }),
       });
 
@@ -673,8 +682,27 @@ const ProjectEditor = () => {
       connectWebSocket(jobId,
         (progress) => setFindMoreProgress(progress),
         async () => {
-          await refreshProject();
+          // Refresh project and identify new moments
+          const refreshedProject = await refreshProject();
           setFindMoreProgress(null);
+
+          // Calculate which moments are new
+          if (refreshedProject?.moments) {
+            const newIds = new Set<string>();
+            for (const m of refreshedProject.moments) {
+              if (!previousMomentIdsRef.current.has(m.id)) {
+                newIds.add(m.id);
+              }
+            }
+            // Add new IDs to existing set (keep previous NEW badges until clicked)
+            setNewMomentIds(prev => {
+              const combined = new Set(prev);
+              for (const id of newIds) {
+                combined.add(id);
+              }
+              return combined;
+            });
+          }
         }
       );
     } catch (err) {
@@ -806,6 +834,15 @@ const ProjectEditor = () => {
         return;
       }
 
+      // Remove "new" highlight when moment is clicked
+      if (newMomentIds.has(marker.id)) {
+        setNewMomentIds(prev => {
+          const updated = new Set(prev);
+          updated.delete(marker.id);
+          return updated;
+        });
+      }
+
       setSelectedMomentId(marker.id);
       // Seek video to moment start and start playback
       if (videoRef.current && typeof marker.startTime === 'number') {
@@ -853,7 +890,7 @@ const ProjectEditor = () => {
       console.error('handleMomentClick error:', error);
       // Don't rethrow - prevent grey screen crash
     }
-  }, [project?.moments, projectId]);
+  }, [project?.moments, projectId, newMomentIds]);
 
   // Handle moment delete
   const handleMomentDelete = useCallback(async (momentId: string) => {
@@ -1366,6 +1403,7 @@ const ProjectEditor = () => {
               onMomentDelete={handleMomentDelete}
               onFindMore={handleFindMoreMoments}
               findMoreLoading={findMoreProgress !== null}
+              newMomentIds={newMomentIds}
               className="flex-1 overflow-y-auto"
             />
             {/* Find More Progress Bar */}
@@ -1527,6 +1565,7 @@ const ProjectEditor = () => {
                 onMomentDelete={handleMomentDelete}
                 onFindMore={handleFindMoreMoments}
                 findMoreLoading={findMoreProgress !== null}
+                newMomentIds={newMomentIds}
                 className="flex-1 max-h-[calc(100vh-250px)]"
               />
               {/* Find More Progress Bar */}

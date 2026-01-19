@@ -87,6 +87,11 @@ For each engaging moment you identify, provide:
 - reason: A SHORT (1-2 sentences) explanation of why this moment is engaging
 
 CRITICAL RULES:
+- **DISTRIBUTE MOMENTS EVENLY ACROSS THE ENTIRE VIDEO** - this is EXTREMELY important!
+  - Divide the transcript into roughly equal time sections (beginning, middle, end)
+  - Find engaging moments from EACH section, not just the beginning
+  - For long videos (>1 hour), ensure you find moments from: first third, middle third, and final third
+  - DO NOT cluster all moments at the start of the video
 - WRITE THE "reason" FIELD IN THE SAME LANGUAGE AS THE TRANSCRIPT (if Russian, write in Russian; if English, write in English, etc.)
 - Always use the EXACT timestamps provided in the transcript segments
 - Ensure each moment contains COMPLETE sentences/thoughts
@@ -449,8 +454,19 @@ def find_engaging_moments(
         logger.warning("No transcript segments found in input")
         return []
 
+    # Get video duration for distribution guidance
+    video_duration = _get_transcript_duration(transcript_json)
+    duration_mins = int(video_duration / 60)
+
     # Build the user prompt
     user_prompt = f"""Analyze the following transcript and identify the TOP {max_moments} most engaging moments (hooks) that are between {min_duration:.0f}-{max_duration:.0f} seconds long.
+
+VIDEO DURATION: {duration_mins} minutes
+
+IMPORTANT - DISTRIBUTE EVENLY:
+- This video is {duration_mins} minutes long
+- Find moments from the BEGINNING (0-{duration_mins//3}min), MIDDLE ({duration_mins//3}-{2*duration_mins//3}min), and END ({2*duration_mins//3}-{duration_mins}min)
+- DO NOT find all moments only from the first 30 minutes - spread them across the entire video!
 
 TRANSCRIPT:
 {formatted_transcript}
@@ -461,6 +477,7 @@ Remember:
 - Duration must be between {min_duration:.0f}-{max_duration:.0f} seconds
 - Use the EXACT timestamps from the transcript
 - Keep the "reason" field SHORT (1-2 sentences max)
+- **CRITICAL: Distribute moments across the ENTIRE video timeline, not just the beginning**
 
 Respond with JSON only."""
 
@@ -511,24 +528,47 @@ def _format_exclude_segments(exclude_segments: list[dict[str, float]]) -> str:
     if not exclude_segments:
         return ""
 
-    lines = ["IMPORTANT: The following time ranges have ALREADY been identified as engaging moments.",
-             "DO NOT include any moments that overlap with these ranges:",
+    lines = ["=" * 60,
+             "⚠️ CRITICAL - EXCLUDED TIME RANGES ⚠️",
+             "=" * 60,
              "",
-             "EXCLUDED RANGES:"]
+             "The following time ranges are ALREADY SELECTED and MUST BE AVOIDED.",
+             "You MUST NOT return any moment that starts OR ends within these ranges.",
+             "Even 1 second of overlap is NOT ALLOWED.",
+             "",
+             "FORBIDDEN TIME RANGES (do not overlap with ANY of these):"]
 
-    for seg in exclude_segments:
+    for i, seg in enumerate(exclude_segments):
         start = seg.get("start", 0)
         end = seg.get("end", 0)
-        lines.append(f"- {start:.2f}s - {end:.2f}s (already selected)")
+        # Добавляем буфер 5 секунд для наглядности
+        lines.append(f"  ❌ {i+1}. [{start:.0f}s - {end:.0f}s] - BLOCKED")
+
+    # Вычисляем доступные промежутки
+    sorted_segs = sorted(exclude_segments, key=lambda s: s.get("start", 0))
+    available_gaps = []
+    prev_end = 0
+    for seg in sorted_segs:
+        start = seg.get("start", 0)
+        if start - prev_end > 60:  # Только промежутки больше 60 секунд
+            available_gaps.append((prev_end, start))
+        prev_end = max(prev_end, seg.get("end", 0))
 
     lines.append("")
-    lines.append("Find NEW engaging moments in OTHER parts of the transcript.")
+    lines.append("✅ AVAILABLE TIME GAPS (search ONLY in these ranges):")
+    for gap_start, gap_end in available_gaps[:15]:  # Показываем до 15 промежутков
+        gap_duration = gap_end - gap_start
+        lines.append(f"  ✅ [{gap_start:.0f}s - {gap_end:.0f}s] ({gap_duration:.0f}s available)")
+
+    lines.append("")
+    lines.append("⚠️ REMINDER: Your moment's start AND end times MUST be within the green ✅ ranges above!")
+    lines.append("=" * 60)
     lines.append("")
 
     return "\n".join(lines)
 
 
-def _overlaps(moment: EngagingMoment, exclude_segments: list[dict[str, float]], tolerance: float = 2.0) -> bool:
+def _overlaps(moment: EngagingMoment, exclude_segments: list[dict[str, float]], tolerance: float = 0.0) -> bool:
     """
     Check if a moment overlaps with any excluded segments.
 
@@ -591,6 +631,10 @@ async def find_engaging_moments_async(
         logger.warning("No transcript segments found in input")
         return []
 
+    # Get video duration for distribution guidance
+    video_duration = _get_transcript_duration(transcript_json)
+    duration_mins = int(video_duration / 60)
+
     # Format exclude segments if provided
     exclude_section = ""
     if exclude_segments:
@@ -598,6 +642,13 @@ async def find_engaging_moments_async(
 
     # Build the user prompt
     user_prompt = f"""Analyze the following transcript and identify the TOP {max_moments} most engaging moments (hooks) that are between {min_duration:.0f}-{max_duration:.0f} seconds long.
+
+VIDEO DURATION: {duration_mins} minutes
+
+IMPORTANT - DISTRIBUTE EVENLY:
+- This video is {duration_mins} minutes long
+- Find moments from the BEGINNING (0-{duration_mins//3}min), MIDDLE ({duration_mins//3}-{2*duration_mins//3}min), and END ({2*duration_mins//3}-{duration_mins}min)
+- DO NOT find all moments only from the first 30 minutes - spread them across the entire video!
 
 {exclude_section}TRANSCRIPT:
 {formatted_transcript}
@@ -608,6 +659,7 @@ Remember:
 - Duration must be between {min_duration:.0f}-{max_duration:.0f} seconds
 - Use the EXACT timestamps from the transcript
 - Keep the "reason" field SHORT (1-2 sentences max)
+- **CRITICAL: Distribute moments across the ENTIRE video timeline, not just the beginning**
 
 Respond with JSON only."""
 
@@ -627,25 +679,33 @@ Respond with JSON only."""
 
         # Parse response into EngagingMoment objects
         moments = _parse_gemini_response(response, transcript_json)
+        logger.info(f"Gemini returned {len(moments)} raw moments")
 
         # Filter by duration requirements
-        valid_moments = [
+        duration_filtered = [
             m for m in moments
             if min_duration <= m.duration <= max_duration
         ]
+        if len(duration_filtered) < len(moments):
+            logger.info(f"Duration filter: {len(moments)} -> {len(duration_filtered)} (removed {len(moments) - len(duration_filtered)} outside {min_duration}-{max_duration}s range)")
+
+        valid_moments = duration_filtered
 
         # Post-filter to remove any moments that overlap with excluded segments
         # (in case LLM ignored the exclude instruction)
         if exclude_segments:
-            valid_moments = [
+            overlap_filtered = [
                 m for m in valid_moments
                 if not _overlaps(m, exclude_segments)
             ]
+            if len(overlap_filtered) < len(valid_moments):
+                logger.info(f"Overlap filter: {len(valid_moments)} -> {len(overlap_filtered)} (removed {len(valid_moments) - len(overlap_filtered)} overlapping with existing)")
+            valid_moments = overlap_filtered
 
         # Sort by start time
         valid_moments.sort(key=lambda m: m.start)
 
-        logger.info(f"Found {len(valid_moments)} engaging moments")
+        logger.info(f"Final result: {len(valid_moments)} engaging moments")
         return valid_moments
 
     finally:

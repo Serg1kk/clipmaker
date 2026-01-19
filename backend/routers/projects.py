@@ -352,12 +352,17 @@ async def process_find_moments(
             "duration": project.transcription.duration,
         }
 
+        # Calculate max_moments based on video duration (~1 moment per 20 minutes)
+        video_duration = project.transcription.duration or 0
+        # 1 moment per 1200 seconds (20 minutes), minimum 7, maximum 20
+        calculated_max_moments = max(7, min(20, int(video_duration / 1200) + 5))
+
         await connection_manager.broadcast_to_job(job_id, ProgressMessage(
             type="moments_progress",
             job_id=job_id,
             stage="Finding AI Moments",
             progress=20.0,
-            message="AI is analyzing your transcript...",
+            message=f"AI is analyzing your transcript (searching for up to {calculated_max_moments} moments)...",
         ))
 
         # Find engaging moments using Gemini
@@ -365,6 +370,7 @@ async def process_find_moments(
             transcript_json,
             min_duration=min_duration,
             max_duration=max_duration,
+            max_moments=calculated_max_moments,
         )
 
         await connection_manager.broadcast_to_job(job_id, ProgressMessage(
@@ -564,12 +570,18 @@ async def process_find_more_moments(
             "duration": project.transcription.duration,
         }
 
+        # Calculate max_moments based on video duration (~1 moment per 20 minutes)
+        # For find-more, we use the same proportional logic
+        video_duration = project.transcription.duration or 0
+        # 1 moment per 1200 seconds (20 minutes), minimum 5, maximum 15
+        calculated_max_moments = max(5, min(15, int(video_duration / 1200) + 3))
+
         await connection_manager.broadcast_to_job(job_id, ProgressMessage(
             type="moments_progress",
             job_id=job_id,
             stage="Finding More Moments",
             progress=20.0,
-            message=f"AI is searching for new moments (excluding {len(existing_moments)} existing)...",
+            message=f"AI is searching for {calculated_max_moments} new moments (excluding {len(existing_moments)} existing)...",
         ))
 
         # Find engaging moments using Gemini, excluding existing segments
@@ -577,7 +589,7 @@ async def process_find_more_moments(
             transcript_json,
             min_duration=min_duration,
             max_duration=max_duration,
-            max_moments=max_new_moments,
+            max_moments=calculated_max_moments,
             exclude_segments=existing_moments,
         )
 
